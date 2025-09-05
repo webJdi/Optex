@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -13,5 +14,18 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const analytics = typeof window !== "undefined" ? getAnalytics(app) : undefined;
+export const auth = getAuth(app);
+
+export async function login(email: string, password: string) {
+  return signInWithEmailAndPassword(auth, email, password);
+}
+
+export async function signup(email: string, password: string) {
+  return createUserWithEmailAndPassword(auth, email, password);
+}
+
+export async function logout() {
+  return signOut(auth);
+}
 
 export { app, analytics };
