@@ -12,7 +12,8 @@ const accent = '#00e6fe';
 const cardBg = '#17153A';
 const textColor = '#fff';
 const gradientBg = 'linear-gradient(-120deg, #ea67cfff 0%, #5b2be1 100%)';
-const shadowDrop = '3px 5px 23px 3px rgba(0,0,0,0.39);'
+const shadowDrop = '3px 5px 23px 3px rgba(0,0,0,0.39);';
+const textColor2 = '#17153A';
 
 const col1 = '#E07A5F';
 const col2 = '#81B29A';
