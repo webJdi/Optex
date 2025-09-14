@@ -82,16 +82,56 @@ export default function Sidebar() {
               </Button>
             </ListItem>
             <ListItem>
-              <Button sx={{ color: textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><FactoryIcon /> <Typography fontSize={'0.9em'}>Optimizer</Typography></Button>
+                <Button 
+                  onClick={() => handleNavigation('/optimizer')}
+                  sx={{ color: router.pathname === '/optimizer' ? accent : textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none',
+                    '&:hover': {
+                      backgroundColor: router.pathname === '/optimizer' ? accent : 'rgba(0, 230, 254, 0.1)',
+                      color: router.pathname === '/optimizer' ? textColor2 : accent,
+                    }
+                  }}
+                >
+                  <FactoryIcon /> <Typography fontSize={'0.9em'}>Optimizer</Typography>
+                </Button>
             </ListItem>
             <ListItem>
-              <Button sx={{ color: textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><VideogameAssetIcon /> <Typography fontSize={'0.9em'}>Simulation</Typography></Button>
+                <Button 
+                  onClick={() => handleNavigation('/simulation')}
+                  sx={{ color: router.pathname === '/simulation' ? accent : textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none',
+                    '&:hover': {
+                      backgroundColor: router.pathname === '/simulation' ? accent : 'rgba(0, 230, 254, 0.1)',
+                      color: router.pathname === '/simulation' ? textColor2 : accent,
+                    }
+                  }}
+                >
+                  <VideogameAssetIcon /> <Typography fontSize={'0.9em'}>Simulation</Typography>
+                </Button>
             </ListItem>
             <ListItem>
-              <Button sx={{ color: textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><SmartToyIcon /> <Typography fontSize={'0.9em'}>Co-Pilot</Typography></Button>
+                <Button 
+                  onClick={() => handleNavigation('/copilot')}
+                  sx={{ color: router.pathname === '/copilot' ? accent : textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none',
+                    '&:hover': {
+                      backgroundColor: router.pathname === '/copilot' ? accent : 'rgba(0, 230, 254, 0.1)',
+                      color: router.pathname === '/copilot' ? textColor2 : accent,
+                    }
+                  }}
+                >
+                  <SmartToyIcon /> <Typography fontSize={'0.9em'}>Co-Pilot</Typography>
+                </Button>
             </ListItem>
             <ListItem>
-              <Button sx={{ color: textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><SmartToyIcon /> <Typography fontSize={'0.9em'}> Model Builder</Typography></Button>
+                <Button 
+                  onClick={() => handleNavigation('/modelbuilder')}
+                  sx={{ color: router.pathname === '/modelbuilder' ? accent : textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none',
+                    '&:hover': {
+                      backgroundColor: router.pathname === '/modelbuilder' ? accent : 'rgba(0, 230, 254, 0.1)',
+                      color: router.pathname === '/modelbuilder' ? textColor2 : accent,
+                    }
+                  }}
+                >
+                  <SmartToyIcon /> <Typography fontSize={'0.9em'}>Model Builder</Typography>
+                </Button>
             </ListItem>
             <ListItem>
               <Button sx={{ color: textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><SmartToyIcon /> <Typography fontSize={'0.9em'}>Co-Pilot</Typography></Button>
