@@ -7,12 +7,36 @@ export interface KpiModel {
   tsr_pct: number;
 }
 
+export interface RawMillModel {
+  limestone_feeder_pct: number;
+  clay_feeder_pct: number;
+  power_kw: number;
+  mill_power_kwh_ton: number;
+  mill_vibration_mm_s: number;
+  separator_speed_rpm: number;
+  mill_throughput_tph: number;
+}
+
+export interface KilnModel {
+  burning_zone_temp_c: number;
+  trad_fuel_rate_kg_hr: number;
+  alt_fuel_rate_kg_hr: number;
+  kiln_speed_rpm: number;
+  kiln_motor_torque_pct: number;
+  o2_level_pct: number;
+}
+
+export interface ProductionModel {
+  clinker_rate_tph: number;
+  clinker_temp_c: number;
+}
+
 export interface PlantReading {
   timestamp: number;
   kpi: KpiModel;
-  raw_mill: any;
-  kiln: any;
-  production: any;
+  raw_mill: RawMillModel;
+  kiln: KilnModel;
+  production: ProductionModel;
 }
 
 export async function fetchPlantReading(): Promise<PlantReading> {

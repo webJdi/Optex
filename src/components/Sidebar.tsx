@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Typography, List, ListItem, Button } from '@mui/material';
+import { useRouter } from 'next/router';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import AllInclusiveIcon from '@mui/icons-material/AllInclusive';
@@ -9,10 +10,22 @@ import FactoryIcon from '@mui/icons-material/Factory';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 
 const accent = '#00e6fe';
+const cardBg = '#17153A';
 const textColor = '#fff';
+const textColor2 = '#17153A';
+const gradientBg = 'linear-gradient(-120deg, #ea67cfff 0%, #5b2be1 100%)';
 const menuGrad = 'linear-gradient(180deg, #262250 0%, #17163B 100%)';
+const shadowDrop = '3px 5px 23px 3px rgba(0,0,0,0.39);'
+const glowBg = 'linear-gradient(135deg, #40DDFF 0%, #0B98C5 100%)';
+
 
 export default function Sidebar() {
+  const router = useRouter();
+  
+  const handleNavigation = (path: string) => {
+    router.push(path);
+  };
+
   return (
     <Box sx={{
       width: { xs: '100%', md: '15vw' },
@@ -29,25 +42,59 @@ export default function Sidebar() {
       </Typography>
       <List sx={{ width: '90%' }}>
         <ListItem>
-              <Button sx={{ color: accent, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><DashboardIcon /> <Typography fontSize={'0.9em'}>Dashboard</Typography></Button>
+              <Button 
+                onClick={() => handleNavigation('/dashboard')}
+                sx={{ 
+                  color: router.pathname === '/dashboard' ? accent : textColor, 
+                  //backgroundColor: router.pathname === '/dashboard' ? accent : 'transparent',
+                  width:'100%', 
+                  p: 1, 
+                  display: 'flex', 
+                  justifyContent:'space-around', 
+                  textTransform: 'none',
+                  '&:hover': {
+                    backgroundColor: router.pathname === '/dashboard' ? accent : 'rgba(0, 230, 254, 0.1)',
+                    color: router.pathname === '/dashboard' ? textColor2 : accent, 
+                  }
+                }}
+              >
+                <DashboardIcon /> <Typography fontSize={'0.9em'}>Dashboard</Typography>
+              </Button>
             </ListItem>
             <ListItem>
-              <Button sx={{ color: accent, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><AllInclusiveIcon /> <Typography fontSize={'0.9em'}>Soft Sensors</Typography></Button>
+              <Button 
+                onClick={() => handleNavigation('/softsensors')}
+                sx={{ 
+                  color: router.pathname === '/softsensors' ? accent : textColor,
+                  //backgroundColor: router.pathname === '/softsensors' ? accent : 'transparent',
+                  width:'100%', 
+                  p: 1, 
+                  display: 'flex', 
+                  justifyContent:'space-around', 
+                  textTransform: 'none',
+                  '&:hover': {
+                    backgroundColor: router.pathname === '/softsensors' ? accent : 'rgba(0, 230, 254, 0.1)',
+                    color: router.pathname === '/softsensors' ? textColor2 : accent,
+                  }
+                }}
+              >
+                <AllInclusiveIcon /> <Typography fontSize={'0.9em'}>Soft Sensors</Typography>
+              </Button>
             </ListItem>
             <ListItem>
-              <Button sx={{ color: accent, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><FactoryIcon /> <Typography fontSize={'0.9em'}>Optimizer</Typography></Button>
+              <Button sx={{ color: textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><FactoryIcon /> <Typography fontSize={'0.9em'}>Optimizer</Typography></Button>
             </ListItem>
             <ListItem>
-              <Button sx={{ color: accent, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><VideogameAssetIcon /> <Typography fontSize={'0.9em'}>Simulation</Typography></Button>
+              <Button sx={{ color: textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><VideogameAssetIcon /> <Typography fontSize={'0.9em'}>Simulation</Typography></Button>
             </ListItem>
             <ListItem>
-              <Button sx={{ color: accent, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><SmartToyIcon /> <Typography fontSize={'0.9em'}>Co-Pilot</Typography></Button>
+              <Button sx={{ color: textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><SmartToyIcon /> <Typography fontSize={'0.9em'}>Co-Pilot</Typography></Button>
             </ListItem>
             <ListItem>
-              <Button sx={{ color: accent, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><SmartToyIcon /> <Typography fontSize={'0.9em'}> Model Builder</Typography></Button>
+              <Button sx={{ color: textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><SmartToyIcon /> <Typography fontSize={'0.9em'}> Model Builder</Typography></Button>
             </ListItem>
             <ListItem>
-              <Button sx={{ color: accent, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><SmartToyIcon /> <Typography fontSize={'0.9em'}>Co-Pilot</Typography></Button>
+              <Button sx={{ color: textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><SmartToyIcon /> <Typography fontSize={'0.9em'}>Co-Pilot</Typography></Button>
             </ListItem>
       </List>
     </Box>
