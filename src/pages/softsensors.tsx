@@ -90,17 +90,20 @@ export default function SoftSensors() {
       softSensors.forEach(sensor => {
         if (predictions) {
           const currentValue = sensor.getValue(predictions);
-          // For trend calculation, we'll use a simple simulation since we don't have historical predictions yet
-          const simulatedChange = (Math.random() - 0.5) * 10; // ±5% random change
-          
-          trends[sensor.id] = {
-            current: currentValue,
-            change: simulatedChange,
-            data: Array.from({ length: 24 }, (_, i) => ({
-              time: Date.now() - (23 - i) * 300000, // 5-minute intervals
-              value: currentValue + (Math.random() - 0.5) * currentValue * 0.1
-            }))
-          };
+           // Calculate average from historical data for this sensor
+           const values = historicalData.map(d => sensor.getValue(d));
+           const avgValue = values.length ? values.reduce((a, b) => a + b, 0) / values.length : currentValue;
+           // Calculate percent change from average to current
+           const change = avgValue !== 0 ? ((currentValue - avgValue) / avgValue) * 100 : 0;
+
+           trends[sensor.id] = {
+             current: currentValue,
+             change,
+             data: Array.from({ length: 24 }, (_, i) => ({
+               time: Date.now() - (23 - i) * 300000, // 5-minute intervals
+               value: currentValue + (Math.random() - 0.5) * currentValue * 0.1
+             }))
+           };
         }
       });
       setSensorTrends(trends);
