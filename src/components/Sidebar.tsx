@@ -4,6 +4,7 @@ import { useRouter } from 'next/router';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import AllInclusiveIcon from '@mui/icons-material/AllInclusive';
+import BuildIcon from '@mui/icons-material/Build';
 
 import VideogameAssetIcon from '@mui/icons-material/VideogameAsset';
 import FactoryIcon from '@mui/icons-material/Factory';
@@ -130,11 +131,8 @@ export default function Sidebar() {
                     }
                   }}
                 >
-                  <SmartToyIcon /> <Typography fontSize={'0.9em'}>Model Builder</Typography>
+                  <BuildIcon /> <Typography fontSize={'0.9em'}>Model Builder</Typography>
                 </Button>
-            </ListItem>
-            <ListItem>
-              <Button sx={{ color: textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none' }}><SmartToyIcon /> <Typography fontSize={'0.9em'}>Co-Pilot</Typography></Button>
             </ListItem>
       </List>
     </Box>

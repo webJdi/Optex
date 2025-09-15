@@ -144,10 +144,10 @@ export default function Dashboard() {
         {/* Main Content */}
         <Box sx={{
           flex: 1,
-          p: 5,
+          p: 4,
           display: 'flex',
           flexDirection: 'column',
-          gap: 4,
+          gap: 1,
         }}>
           {/* Header */}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
@@ -253,67 +253,97 @@ export default function Dashboard() {
           {/* Interactive Chart */}
           <Paper
             sx={{
-              background: cardBg,
-              borderRadius: 4,
+              background: 'linear-gradient(120deg, #17153A 0%, #1a1a3d 100%)',
+              borderRadius: 8,
               p: 4,
-              mb: 2,
-              minHeight: 400,
-              }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              mb: 0,
+              minHeight: 350,
+              boxShadow: '0 4px 32px 0 rgba(0,230,254,0.12)',
+              position: 'relative',
+              overflow: 'visible',
+            }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
               <Typography sx={{
                 color: accent,
-                fontWeight: 700,
-                fontSize: 18
+                fontWeight: 400,
+                fontSize: 18,
+                fontFamily: 'Montserrat, sans-serif'
                 }}>
                   KPI Trend
               </Typography>
             </Box>
-            
-            {/* Chart and Selectors Side by Side */}
-            <Box sx={{ display: 'flex', gap: 3, height: 300 }}>
-              {/* Chart Area - 80% width */}
-              <Box sx={{ flex: '0 0 80%' }}>
+            <Box sx={{ display: 'flex', gap: 3, height: 400 }}>
+              <Box sx={{ flex: '0 0 80%', position: 'relative' }}>
                 {historicalData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={getChartData()}>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={getChartData()} margin={{ top: 30, right: 30, left: 0, bottom: 0 }}>
+                      <defs>
+                        <filter id="neon-glow" x="-50%" y="-50%" width="200%" height="200%">
+                          <feDropShadow dx="0" dy="0" stdDeviation="6" floodColor="#00e6fe" floodOpacity="0.7" />
+                          <feDropShadow dx="0" dy="0" stdDeviation="2" floodColor="#fff" floodOpacity="0.3" />
+                        </filter>
+                      </defs>
                       <XAxis 
                         dataKey="time" 
-                        stroke="#b6d4e3"
-                        fontSize={12}
+                        stroke="#4dd0e1"
+                        fontSize={13}
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: '#b6d4e3', fontWeight: 500 }}
                       />
                       <YAxis 
                         yAxisId="left"
-                        stroke="#b6d4e3"
-                        fontSize={12}
+                        stroke="#4dd0e1"
+                        fontSize={13}
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: '#b6d4e3', fontWeight: 500 }}
+                        width={40}
+                        domain={[dataMin => Math.floor(dataMin * 0.98), dataMax => Math.ceil(dataMax * 1.02)]}
                       />
                       {selectedKpis.length > 1 && (
                         <YAxis 
                           yAxisId="right"
                           orientation="right"
-                          stroke="#b6d4e3"
-                          fontSize={12}
+                          stroke="#ea67cf"
+                          fontSize={13}
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fill: '#ea67cf', fontWeight: 500 }}
+                          width={40}
+                          domain={[dataMin => Math.floor(dataMin * 0.98), dataMax => Math.ceil(dataMax * 1.02)]}
                         />
                       )}
+                      <CartesianGrid stroke="rgba(255,255,255,0.07)" vertical={false} />
                       <Tooltip 
                         contentStyle={{
-                          backgroundColor: cardBg,
-                          border: '1px solid rgba(255,255,255,0.2)',
-                          borderRadius: 8,
-                          color: textColor
+                          background: 'rgba(23,21,58,0.95)',
+                          border: '1px solid #00e6fe',
+                          borderRadius: 12,
+                          color: textColor,
+                          fontWeight: 700,
+                          fontSize: 16,
+                          boxShadow: '0 2px 16px 0 #00e6fe44',
                         }}
+                        itemStyle={{ fontWeight: 700, fontSize: 15 }}
+                        labelStyle={{ color: accent, fontWeight: 700, fontSize: 15 }}
+                        cursor={{ stroke: accent, strokeWidth: 2, opacity: 0.3 }}
+                        formatter={(value, name, props) => [value, name]}
                       />
-                      <Legend />
+                      <Legend wrapperStyle={{ color: textColor, fontWeight: 700, fontSize: 15 }} />
                       {selectedKpis.map((kpi, index) => (
                         <Line 
                           key={index}
-                          type="monotone" 
+                          type="monotone"
                           dataKey={`value${index}`}
-                          stroke={colors[index]} 
-                          strokeWidth={2}
-                          dot={{ fill: colors[index], strokeWidth: 2, r: 4 }}
-                          activeDot={{ r: 6, fill: colors[index] }}
-                          yAxisId={index < 2 ? "left" : "right"}
+                          stroke={colors[index]}
+                          strokeWidth={4}
+                          dot={false}
+                          activeDot={false}
+                          yAxisId={index === 0 ? "left" : "right"}
                           name={kpiOptions.find(opt => opt.value === kpi)?.label || kpi}
+                          filter="url(#neon-glow)"
+                          strokeOpacity={0.5}
                         />
                       ))}
                     </LineChart>
@@ -333,8 +363,8 @@ export default function Dashboard() {
                 )}
               </Box>
               
-              {/* Selectors Area - 20% width */}
-              <Box sx={{ flex: '0 0 20%', display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {/* Selectors Area */}
+              <Box sx={{ flex: '0 0 20%', display: 'flex', flexDirection: 'column', gap: 0 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                   <IconButton 
                     onClick={addKpi}
@@ -355,12 +385,12 @@ export default function Dashboard() {
                   <Box key={index} sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Typography sx={{ color: colors[index], fontSize: 14, fontWeight: 600 }}>
-                        Var {index + 1}
+                        Variable {index + 1}
                       </Typography>
                       {selectedKpis.length > 1 && (
                         <IconButton 
                           onClick={() => removeKpi(index)}
-                          sx={{ color: '#f36', padding: 0.5 }}
+                          sx={{ color: accent, padding: 0.5 }}
                           size="small"
                         >
                           <RemoveIcon fontSize="small" />

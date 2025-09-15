@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict
+from typing import Dict, Optional
 import numpy as np
 import time
 import joblib
@@ -315,12 +315,28 @@ class PlantSimulator:
         # --- Control Setpoints (what operators would set) ---
         self.target_lsf = 98.0
         self.target_production_rate = 150.0 # tons/hour
+        
+        # --- Control System Variables ---
+        self.optimizer_targets = None  # Current optimizer targets
+        self.actual_values = {
+            'trad_fuel_rate_kg_hr': 1200.0,
+            'alt_fuel_rate_kg_hr': 400.0, 
+            'raw_meal_feed_rate_tph': 150.0,
+            'kiln_speed_rpm': 3.5,
+            'id_fan_speed_pct': 75.0
+        }
+        self.control_active = False
+        self.control_response_rate = 0.1  # How fast the plant responds (0.1 = 10% per step)
+        self.last_control_update = time.time()
 
     def step(self):
         """
         Runs one time-step of the simulation and calculates all KPIs.
         """
         self.tick += 1
+        
+        # Apply control actions first (move towards targets)
+        self.apply_control_actions()
 
         # --- 1. Simulate External Variability ---
         self.limestone_quality_drift += np.sin(self.tick / 200) * 0.2
@@ -350,37 +366,31 @@ class PlantSimulator:
         separator_speed_rpm = 75 + (self.target_lsf - 98) * 50 + np.random.normal(0, 5)
         separator_speed_rpm = np.clip(separator_speed_rpm, 60, 120)
 
-        # --- 3. Pyroprocessing Simulation ---
-        clinker_production_rate_kg_hr = self.target_production_rate * 1000 * 0.65
-        base_shc = 740 + (self.alt_fuel_moisture - 5.0) * 10
-        total_energy_kcal_hr = base_shc * clinker_production_rate_kg_hr
-        tsr_pct = np.clip(25.0 - (self.alt_fuel_moisture - 5.0) * 3 + np.sin(self.tick/100) * 5, 15, 40)
-        energy_from_alt_fuels = total_energy_kcal_hr * (tsr_pct / 100.0)
-        energy_from_trad_fuels = total_energy_kcal_hr * (1 - tsr_pct / 100.0)
-        trad_fuel_rate_kg_hr = energy_from_trad_fuels / 7000
-        alt_fuel_rate_kg_hr = energy_from_alt_fuels / 4500
+        # --- 3. Pyroprocessing Simulation (using actual controlled values) ---
+        # Use actual controlled values instead of calculated ones
+        trad_fuel_rate_kg_hr = self.actual_values['trad_fuel_rate_kg_hr']
+        alt_fuel_rate_kg_hr = self.actual_values['alt_fuel_rate_kg_hr']
+        raw_meal_feed_rate_tph = self.actual_values['raw_meal_feed_rate_tph']
+        kiln_speed_rpm = self.actual_values['kiln_speed_rpm']
+        id_fan_speed_pct = self.actual_values['id_fan_speed_pct']
+        
+        # Calculate derived values based on controlled variables
+        clinker_production_rate_kg_hr = raw_meal_feed_rate_tph * 1000 * 0.65
+        total_energy_kcal_hr = (trad_fuel_rate_kg_hr * 7000) + (alt_fuel_rate_kg_hr * 4500)
+        base_shc = total_energy_kcal_hr / clinker_production_rate_kg_hr if clinker_production_rate_kg_hr > 0 else 740
+        tsr_pct = (alt_fuel_rate_kg_hr * 4500) / total_energy_kcal_hr * 100 if total_energy_kcal_hr > 0 else 25
         
         # Burning zone temperature - influenced by fuel rates and heat transfer
         burning_zone_temp_c = 1450 + (base_shc - 740) * 2 + np.random.normal(0, 5)
         burning_zone_temp_c = np.clip(burning_zone_temp_c, 1400, 1500)
-        
-        # Kiln speed - optimized for residence time and production rate
-        base_kiln_speed = 3.5
-        kiln_speed_rpm = base_kiln_speed + (clinker_production_rate_kg_hr - 97500) / 50000 + np.sin(self.tick / 50) * 0.2
-        kiln_speed_rpm = np.clip(kiln_speed_rpm, 2.8, 4.5)
         
         # Kiln motor torque - related to material load and kiln speed
         material_load_factor = clinker_production_rate_kg_hr / 100000
         kiln_motor_torque_pct = 65 + material_load_factor * 20 + (4.0 - kiln_speed_rpm) * 5 + np.random.normal(0, 3)
         kiln_motor_torque_pct = np.clip(kiln_motor_torque_pct, 50, 85)
         
-        # Calculate excess air factor first (needed for both ID fan and O2 calculations)
-        excess_air_factor = 1.15 + (tsr_pct - 25) * 0.01
-        
-        # ID Fan Speed and Power simulation
-        base_id_fan_speed_pct = 75.0
-        id_fan_speed_pct = base_id_fan_speed_pct + (excess_air_factor - 1.15) * 100 + np.random.normal(0, 2)
-        id_fan_speed_pct = np.clip(id_fan_speed_pct, 60, 90)
+        # Calculate excess air factor based on controlled fan speed
+        excess_air_factor = 1.0 + (id_fan_speed_pct - 70) * 0.005
         
         # ID Fan Power follows cubic fan law
         id_fan_power_kw = 180 * (id_fan_speed_pct / 75) ** 3
@@ -392,10 +402,6 @@ class PlantSimulator:
         
         kiln_outlet_o2_pct = kiln_inlet_o2_pct - 0.7 + np.random.normal(0, 0.2)
         kiln_outlet_o2_pct = np.clip(kiln_outlet_o2_pct, 1.5, 4.0)
-        
-        # Raw meal feed rate - includes variability
-        raw_meal_feed_rate_tph = self.target_production_rate + np.random.normal(0, 2)
-        raw_meal_feed_rate_tph = np.clip(raw_meal_feed_rate_tph, 120, 180)
         
         # Kiln inlet temperature
         kiln_inlet_temp_c = 850 + (burning_zone_temp_c - 1450) * 0.3 + np.random.normal(0, 15)
@@ -444,6 +450,102 @@ class PlantSimulator:
                 "clinker_temp_c": round(clinker_temp_c, 1)
             }
         }
+        
+    def apply_optimizer_targets(self, targets):
+        """Apply optimizer targets to the plant control system"""
+        self.optimizer_targets = targets
+        self.control_active = True
+        self.last_control_update = time.time()
+        
+    def apply_control_actions(self):
+        """Move actual values towards optimizer targets with realistic control dynamics"""
+        if not self.control_active or not self.optimizer_targets:
+            return
+            
+        # Target values from optimizer
+        target_values = {
+            'trad_fuel_rate_kg_hr': self.optimizer_targets.trad_fuel_rate_kg_hr,
+            'alt_fuel_rate_kg_hr': self.optimizer_targets.alt_fuel_rate_kg_hr,
+            'raw_meal_feed_rate_tph': self.optimizer_targets.raw_meal_feed_rate_tph,
+            'kiln_speed_rpm': self.optimizer_targets.kiln_speed_rpm,
+            'id_fan_speed_pct': self.optimizer_targets.id_fan_speed_pct
+        }
+        
+        # Apply control actions with realistic response rates and disturbances
+        for variable, target in target_values.items():
+            current = self.actual_values[variable]
+            error = target - current
+            
+            # Different control response rates for different variables
+            if variable in ['trad_fuel_rate_kg_hr', 'alt_fuel_rate_kg_hr']:
+                response_rate = 0.15  # Fuel systems respond faster
+            elif variable == 'kiln_speed_rpm':
+                response_rate = 0.05  # Kiln speed changes slowly
+            else:
+                response_rate = self.control_response_rate
+                
+            # Apply control action with noise/disturbances
+            control_action = error * response_rate
+            disturbance = np.random.normal(0, abs(control_action) * 0.1)  # 10% noise
+            
+            new_value = current + control_action + disturbance
+            
+            # Apply physical limits
+            if variable == 'trad_fuel_rate_kg_hr':
+                new_value = np.clip(new_value, 1000, 1500)
+            elif variable == 'alt_fuel_rate_kg_hr':
+                new_value = np.clip(new_value, 200, 600)
+            elif variable == 'raw_meal_feed_rate_tph':
+                new_value = np.clip(new_value, 120, 180)
+            elif variable == 'kiln_speed_rpm':
+                new_value = np.clip(new_value, 3.0, 4.5)
+            elif variable == 'id_fan_speed_pct':
+                new_value = np.clip(new_value, 70, 85)
+                
+            self.actual_values[variable] = new_value
+            
+    def get_control_status(self):
+        """Get current control system status"""
+        if not self.optimizer_targets:
+            # Create default targets if none exist
+            default_targets = OptimizerTargets(
+                trad_fuel_rate_kg_hr=self.actual_values['trad_fuel_rate_kg_hr'],
+                alt_fuel_rate_kg_hr=self.actual_values['alt_fuel_rate_kg_hr'],
+                raw_meal_feed_rate_tph=self.actual_values['raw_meal_feed_rate_tph'],
+                kiln_speed_rpm=self.actual_values['kiln_speed_rpm'],
+                id_fan_speed_pct=self.actual_values['id_fan_speed_pct'],
+                timestamp=time.time()
+            )
+        else:
+            default_targets = self.optimizer_targets
+            
+        actual_targets = OptimizerTargets(
+            trad_fuel_rate_kg_hr=self.actual_values['trad_fuel_rate_kg_hr'],
+            alt_fuel_rate_kg_hr=self.actual_values['alt_fuel_rate_kg_hr'],
+            raw_meal_feed_rate_tph=self.actual_values['raw_meal_feed_rate_tph'],
+            kiln_speed_rpm=self.actual_values['kiln_speed_rpm'],
+            id_fan_speed_pct=self.actual_values['id_fan_speed_pct'],
+            timestamp=time.time()
+        )
+        
+        # Calculate control errors
+        control_errors = {}
+        if self.optimizer_targets:
+            control_errors = {
+                'trad_fuel_rate_kg_hr': self.optimizer_targets.trad_fuel_rate_kg_hr - self.actual_values['trad_fuel_rate_kg_hr'],
+                'alt_fuel_rate_kg_hr': self.optimizer_targets.alt_fuel_rate_kg_hr - self.actual_values['alt_fuel_rate_kg_hr'],
+                'raw_meal_feed_rate_tph': self.optimizer_targets.raw_meal_feed_rate_tph - self.actual_values['raw_meal_feed_rate_tph'],
+                'kiln_speed_rpm': self.optimizer_targets.kiln_speed_rpm - self.actual_values['kiln_speed_rpm'],
+                'id_fan_speed_pct': self.optimizer_targets.id_fan_speed_pct - self.actual_values['id_fan_speed_pct']
+            }
+        
+        return ControlStatus(
+            targets=default_targets,
+            actual_values=actual_targets,
+            control_errors=control_errors,
+            control_active=self.control_active,
+            last_update=self.last_control_update
+        )
 
 # --- Creating a single instance of the simulator ---
 plant_simulator = PlantSimulator()
@@ -467,11 +569,16 @@ class RawMillModel(BaseModel):
 
 class KilnModel(BaseModel):
     burning_zone_temp_c: float
-    trad_fuel_rate_kg_hr: int
-    alt_fuel_rate_kg_hr: int
+    kiln_inlet_temp_c: float
+    trad_fuel_rate_kg_hr: float
+    alt_fuel_rate_kg_hr: float
+    raw_meal_feed_rate_tph: float
     kiln_speed_rpm: float
     kiln_motor_torque_pct: float
-    o2_level_pct: float
+    id_fan_speed_pct: float
+    id_fan_power_kw: float
+    kiln_inlet_o2_pct: float
+    kiln_outlet_o2_pct: float
 
 class ProductionModel(BaseModel):
     clinker_rate_tph: float
@@ -483,6 +590,23 @@ class PlantStateResponse(BaseModel):
     raw_mill: RawMillModel
     kiln: KilnModel
     production: ProductionModel
+
+class OptimizerTargets(BaseModel):
+    """Optimizer targets that will be applied to the plant simulator"""
+    trad_fuel_rate_kg_hr: float
+    alt_fuel_rate_kg_hr: float
+    raw_meal_feed_rate_tph: float
+    kiln_speed_rpm: float
+    id_fan_speed_pct: float
+    timestamp: Optional[float] = None  # When these targets were set
+    
+class ControlStatus(BaseModel):
+    """Status of the plant control system"""
+    targets: OptimizerTargets
+    actual_values: OptimizerTargets
+    control_errors: Dict[str, float]  # target - actual for each variable
+    control_active: bool
+    last_update: float
 
 # --- ML Prediction Models ---
 class PredictionInput(BaseModel):
@@ -748,27 +872,27 @@ def optimize_targets(segment: str = 'Clinkerization', n_data: int = 50, constrai
                 else:
                     # Realistic ranges based on cement plant operations
                     if var == 'trad_fuel_rate_kg_hr':
-                        low, high = 1000, 1500  # Typical traditional fuel range
+                        low, high = 900, 1800  # Typical traditional fuel range
                     elif var == 'alt_fuel_rate_kg_hr':
-                        low, high = 200, 600    # Alternative fuel range
+                        low, high = 100, 1000    # Alternative fuel range
                     elif var == 'raw_meal_feed_rate_tph':
-                        low, high = 120, 180    # Feed rate range
+                        low, high = 100, 220    # Feed rate range
                     elif var == 'kiln_speed_rpm':
-                        low, high = 3.0, 4.5    # Kiln speed range
+                        low, high = 2.0, 5.5    # Kiln speed range
                     elif var == 'id_fan_speed_pct':
-                        low, high = 70, 85      # ID fan speed range
+                        low, high = 60, 95      # ID fan speed range
                     elif 'temp' in var:
-                        low, high = 1400, 1500
+                        low, high = 1350, 1550
                     elif 'torque' in var:
-                        low, high = 50, 85
+                        low, high = 45, 90
                     elif 'o2' in var:
-                        low, high = 2.5, 5.0
+                        low, high = 2.0, 6.0
                     elif 'power' in var and 'kw' in var:
-                        low, high = 150, 250
+                        low, high = 100, 350
                     elif 'vibration' in var:
-                        low, high = 2, 6
+                        low, high = 1, 7
                     elif 'feeder' in var:
-                        low, high = 15, 25
+                        low, high = 10, 35
                     else:
                         low, high = 0, 100
                 
@@ -904,6 +1028,27 @@ def optimize_targets_api_post(request: OptimizeRequest):
     """
     constraint_ranges = [cr.dict() for cr in request.constraint_ranges] if request.constraint_ranges else None
     return optimize_targets(request.segment, request.n_data, constraint_ranges)
+
+@app.post("/apply_optimizer_targets")
+def apply_optimizer_targets_api(targets: OptimizerTargets):
+    """
+    Apply optimizer targets to the plant control system.
+    """
+    targets.timestamp = time.time()
+    plant_simulator.apply_optimizer_targets(targets)
+    return {
+        "status": "success",
+        "message": "Optimizer targets applied to plant control system",
+        "targets": targets.dict(),
+        "timestamp": targets.timestamp
+    }
+
+@app.get("/control_status", response_model=ControlStatus)
+def get_control_status_api():
+    """
+    Get current control system status including targets, actual values, and errors.
+    """
+    return plant_simulator.get_control_status()
 
 @app.get("/debug/plant_history")
 def debug_plant_history():
