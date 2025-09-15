@@ -7,18 +7,8 @@ import { LineChart, Line, ResponsiveContainer } from 'recharts';
 import Sidebar from '../components/Sidebar';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
+import { accent, cardBg, textColor, textColor2, textColor3, gradientBg, glowBg1, glowBg2, glowBg3, glowBg4, shadowDrop, col1, col2, col3, col4 } from '../components/ColorPalette';
 
-const accent = '#00e6fe';
-const cardBg = '#17153A';
-const textColor = '#fff';
-const gradientBg = 'linear-gradient(-120deg, #ea67cfff 0%, #5b2be1 100%)';
-const shadowDrop = '3px 5px 23px 3px rgba(0,0,0,0.39);';
-const textColor2 = '#17153A';
-
-const col1 = '#E07A5F';
-const col2 = '#81B29A';
-const col3 = '#F2CC8F';
-const col4 = '#048BA8';
 
 // ML-based soft sensor definitions  
 const softSensors = [
@@ -239,7 +229,7 @@ export default function SoftSensors() {
         }}>
           {/* Header */}
           <Box sx={{ mb: 1 }}>
-            <Typography variant="h4" sx={{ color: textColor, fontWeight: 400, mb: 1 }}>
+            <Typography variant="h4" sx={{fontFamily: `'Montserrat', sans-serif`, color: textColor, fontWeight: 400, mb: 1 }}>
               Soft Sensors
             </Typography>
           </Box>

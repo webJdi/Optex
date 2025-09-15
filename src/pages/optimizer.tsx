@@ -1,45 +1,88 @@
 import React, { useState, useEffect } from 'react';
+import { FormControl, Select, MenuItem } from '@mui/material';
 import Sidebar from '../components/Sidebar';
 import { Box, Typography, Paper, Button, CircularProgress } from '@mui/material';
 import WhatshotIcon from '@mui/icons-material/Whatshot';
 import SpeedIcon from '@mui/icons-material/Speed';
 import ScienceIcon from '@mui/icons-material/Science';
 import BoltIcon from '@mui/icons-material/Bolt';
-
-const accent = '#00e6fe';
-const cardBg = '#17153A';
-const textColor = '#fff';
-const gradientBg = 'linear-gradient(-120deg, #ea67cfff 0%, #5b2be1 100%)';
-const shadowDrop = '3px 5px 23px 3px rgba(0,0,0,0.39);';
-const textColor2 = '#17153A';
-
-const col1 = '#E07A5F';
-const col2 = '#81B29A';
-const col3 = '#F2CC8F';
-const col4 = '#048BA8';
+import { accent, cardBg, textColor, textColor2, gradientBg, shadowDrop, col1, col2, col3, col4 } from '../components/ColorPalette';
 
 
 export default function Optimizer() {
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
-    useEffect(() => {
-        document.body.style.margin = '0';
-        return () => { document.body.style.margin = ''; };
-    }, []);
+  const [result, setResult] = useState<any>(null);
+  const [section, setSection] = useState<'Raw Materials & Grinding' | 'Clinkerization'>('Clinkerization');
+  const [timer, setTimer] = useState<number>(300); // 5 min in seconds
+  const [running, setRunning] = useState(false);
+  
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (running && timer > 0) {
+      interval = setInterval(() => setTimer(t => t - 1), 1000);
+    }
+    if (timer === 0 && running) {
+      setRunning(false);
+    }
+    return () => { if (interval) clearInterval(interval); };
+  }, [running, timer]);
+
+  // Variable lists for each section
+  const variables = {
+    'Raw Materials & Grinding': {
+      constraints: [
+        { label: 'Limestone Feeder (%)', value: 'limestone_feeder_pct' },
+        { label: 'Clay Feeder (%)', value: 'clay_feeder_pct' },
+        { label: 'Mill Vibration (mm/s)', value: 'mill_vibration_mm_s' },
+        { label: 'Separator Speed (RPM)', value: 'separator_speed_rpm' },
+      ],
+      optimization: [
+        { label: 'Mill Power (kW)', value: 'power_kw' },
+        { label: 'Mill Throughput (t/h)', value: 'mill_throughput_tph' },
+        { label: 'Mill Power Consumption (kWh/t)', value: 'mill_power_kwh_ton' },
+      ]
+    },
+    'Clinkerization': {
+      constraints: [
+        { label: 'Kiln Motor Torque (%)', value: 'kiln_motor_torque_pct' },
+        { label: 'Burning Zone Temp (°C)', value: 'burning_zone_temp_c' },
+        { label: 'Kiln Inlet O₂ (%)', value: 'kiln_inlet_o2_pct' },
+        { label: 'ID Fan Power (kW)', value: 'id_fan_power_kw' },
+      ],
+      optimization: [
+        { label: 'Traditional Fuel Rate (kg/hr)', value: 'trad_fuel_rate_kg_hr' },
+        { label: 'Alternative Fuel Rate (kg/hr)', value: 'alt_fuel_rate_kg_hr' },
+        { label: 'Raw Meal Feed Rate (t/h)', value: 'raw_meal_feed_rate_tph' },
+        { label: 'Kiln Speed (RPM)', value: 'kiln_speed_rpm' },
+        { label: 'ID Fan Speed (%)', value: 'id_fan_speed_pct' },
+      ]
+    }
+  };
+
+  useEffect(() => {
+    document.body.style.margin = '0';
+    return () => { document.body.style.margin = ''; };
+  }, []);
+
   const handleStart = async () => {
     setLoading(true);
     setResult(null);
+    setRunning(true);
+    setTimer(300);
     try {
-      // Call backend optimizer endpoint (replace with actual endpoint)
-      const res = await fetch('/api/optimizer', { method: 'POST' });
+      const res = await fetch(`http://localhost:8000/optimize_targets?segment=${encodeURIComponent(section)}`);
       const data = await res.json();
-      setResult(data.message || 'Optimizer run complete!');
+      setResult(data);
     } catch (e) {
-      setResult('Failed to run optimizer.');
+      setResult({ error: 'Failed to run optimizer.' });
     }
     setLoading(false);
   };
 
+  const handleStop = () => {
+    setRunning(false);
+    setTimer(300);
+  };
   return (
     <Box sx={{
       minHeight: '100vh',
@@ -49,7 +92,7 @@ export default function Optimizer() {
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
-      // fontFamily removed to avoid MuiTypographyRoot override
+      fontFamily: `'Montserrat', sans-serif`,
     }}>
       <Box sx={{
         width: { xs: '100%', md: '95vw' },
@@ -64,49 +107,96 @@ export default function Optimizer() {
         <Sidebar />
         {/* Main Content */}
         <Box sx={{ flex: 1, p: 5, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {/* Header */}
-          <Typography variant="h4" sx={{ color: textColor, fontWeight: 700, mb: 2 }}>
-            Clinker Optimizer
-          </Typography>
-          {/* DCS-style Clinker Graphic */}
-          <Paper sx={{ background: cardBg, borderRadius: 4, p: 4, mb: 2, boxShadow: shadowDrop }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                <WhatshotIcon sx={{ fontSize: 60, color: accent }} />
-                <Typography sx={{ color: textColor, fontWeight: 600 }}>Burning Zone Temp</Typography>
-                <Typography sx={{ color: accent, fontSize: 24 }}>1450°C</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                <SpeedIcon sx={{ fontSize: 60, color: accent }} />
-                <Typography sx={{ color: textColor, fontWeight: 600 }}>Kiln Speed</Typography>
-                <Typography sx={{ color: accent, fontSize: 24 }}>3.5 RPM</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                <ScienceIcon sx={{ fontSize: 60, color: accent }} />
-                <Typography sx={{ color: textColor, fontWeight: 600 }}>LSF</Typography>
-                <Typography sx={{ color: accent, fontSize: 24 }}>98.0</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                <BoltIcon sx={{ fontSize: 60, color: accent }} />
-                <Typography sx={{ color: textColor, fontWeight: 600 }}>Motor Torque</Typography>
-                <Typography sx={{ color: accent, fontSize: 24 }}>70%</Typography>
-              </Box>
-            </Box>
-          </Paper>
-          {/* Start Optimizer Button */}
+          {/* Header Row with Dropdown */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Typography variant="h4" sx={{fontFamily: `'Montserrat', sans-serif`, color: textColor, fontWeight: 400 }}>
+              Clinker Optimizer
+            </Typography>
+            <FormControl variant="standard" sx={{ minWidth: 220 }}>
+              <Select
+                value={section}
+                onChange={e => setSection(e.target.value as any)}
+                sx={{ color: accent, fontWeight: 700, fontSize: 16, background: cardBg, borderRadius: 2 }}
+              >
+                <MenuItem value="Raw Materials & Grinding">Raw Materials & Grinding</MenuItem>
+                <MenuItem value="Clinkerization">Clinkerization</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+          {/* Vertical Cards for Constraint and Optimization Variables */}
+          <Box sx={{ display: 'flex', gap: 4, mb: 2 }}>
+            {/* Constraint Variables Card */}
+            <Paper sx={{ background: cardBg, borderRadius: 4, p: 4, flex: 1, boxShadow: shadowDrop, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography variant="h6" sx={{ color: accent, fontWeight: 700, mb: 2 }}>Constraint Variables</Typography>
+              {variables[section].constraints.map((v, idx) => (
+                <Box key={v.value} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                  <Typography sx={{ color: textColor, fontWeight: 600 }}>{v.label}</Typography>
+                  {result && result.suggested_targets && result.suggested_targets[v.value] && (
+                    <Typography sx={{ color: accent, fontWeight: 700, fontSize: 18 }}>
+                      {Number(result.suggested_targets[v.value]).toFixed(2)}
+                    </Typography>
+                  )}
+                </Box>
+              ))}
+            </Paper>
+            {/* Optimization Variables Card */}
+            <Paper sx={{ background: cardBg, borderRadius: 4, p: 4, flex: 1, boxShadow: shadowDrop, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography variant="h6" sx={{ color: accent, fontWeight: 700, mb: 2 }}>Optimization Variables</Typography>
+              {variables[section].optimization.map((v, idx) => (
+                <Box key={v.value} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+                  <Typography sx={{ color: textColor, fontWeight: 600 }}>{v.label}</Typography>
+                  {result && result.suggested_targets && result.suggested_targets[v.value] && (
+                    <Typography sx={{ color: accent, fontWeight: 700, fontSize: 18 }}>
+                      {Number(result.suggested_targets[v.value]).toFixed(2)}
+                    </Typography>
+                  )}
+                </Box>
+              ))}
+            </Paper>
+          </Box>
+          {/* Optimizer Controls & Output */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Button
-              variant="contained"
-              sx={{ background: accent, color: textColor, fontWeight: 700, borderRadius: 3, px: 4, py: 1, fontSize: 18 }}
-              onClick={handleStart}
-              disabled={loading}
-            >
-              {loading ? <CircularProgress size={24} sx={{ color: textColor }} /> : 'Start Optimizer'}
-            </Button>
-            {result && (
-              <Typography sx={{ color: accent, fontWeight: 600, ml: 2 }}>{result}</Typography>
+            {!running ? (
+              <Button
+                variant="contained"
+                sx={{ background: accent, color: textColor, fontWeight: 700, borderRadius: 3, px: 4, py: 1, fontSize: 18 }}
+                onClick={handleStart}
+                disabled={loading}
+              >
+                {loading ? <CircularProgress size={24} sx={{ color: textColor }} /> : 'Start Optimizer'}
+              </Button>
+            ) : (
+              <Button
+                variant="outlined"
+                sx={{ borderColor: accent, color: accent, fontWeight: 700, borderRadius: 3, px: 4, py: 1, fontSize: 18 }}
+                onClick={handleStop}
+              >
+                Stop Optimizer
+              </Button>
+            )}
+            {running && (
+              <Typography sx={{ color: accent, fontWeight: 600, ml: 2 }}>
+                Time left: {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
+              </Typography>
+            )}
+            {result && result.model_type && (
+              <Typography sx={{ color: textColor, fontWeight: 600, ml: 2, fontSize: 14 }}>
+                Model: {result.model_type === 'hybrid_fp_ml' ? 'Hybrid (First Principles + ML)' : result.model_type}
+              </Typography>
+            )}
+            {result && result.optimization_score && (
+              <Typography sx={{ color: accent, fontWeight: 600, ml: 2, fontSize: 14 }}>
+                Score: {Number(result.optimization_score).toFixed(2)}
+              </Typography>
             )}
           </Box>
+          {/* Optimizer Output & Error Handling */}
+          {result && result.error && (
+            <Paper sx={{ background: cardBg, borderRadius: 4, p: 3, mt: 3 }}>
+              <Typography variant="h6" sx={{ color: '#f36', fontWeight: 700, mb: 2 }}>Optimizer Error</Typography>
+              <Typography sx={{ color: textColor, fontSize: 16 }}>{result.error}</Typography>
+            </Paper>
+          )}
         </Box>
       </Box>
     </Box>

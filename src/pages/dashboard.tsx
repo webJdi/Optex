@@ -11,15 +11,7 @@ import AllInclusiveIcon from '@mui/icons-material/AllInclusive';
 import VideogameAssetIcon from '@mui/icons-material/VideogameAsset';
 import FactoryIcon from '@mui/icons-material/Factory';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
-
-const accent = '#00e6fe';
-const cardBg = '#17153A';
-const textColor = '#fff';
-const textColor2 = '#17153A';
-const gradientBg = 'linear-gradient(-120deg, #ea67cfff 0%, #5b2be1 100%)';
-const menuGrad = 'linear-gradient(180deg, #262250 0%, #17163B 100%)';
-const shadowDrop = '3px 5px 23px 3px rgba(0,0,0,0.39);'
-const glowBg = 'linear-gradient(135deg, #40DDFF 0%, #0B98C5 100%)';
+import { accent, cardBg, textColor, textColor2, textColor3, gradientBg, glowBg1, glowBg2, glowBg3, glowBg4, glowCol1, glowCol2, glowCol3, glowCol4, shadowDrop, col1, col2, col3, col4 } from '../components/ColorPalette';
 
 export default function Dashboard() {
   const [reading, setReading] = useState<PlantReading | null>(null);
@@ -159,7 +151,7 @@ export default function Dashboard() {
         }}>
           {/* Header */}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-            <Typography variant="h5" sx={{ color: textColor, fontWeight: 700 }}>Dashboard</Typography>
+            <Typography variant="h4" sx={{fontFamily: `'Montserrat', sans-serif`, color: textColor, fontWeight: 400 }}>Dashboard</Typography>
             <Button sx={{ background: accent, color: '#222', borderRadius: 3, fontWeight: 700, textTransform: 'none' }}>Profile</Button>
           </Box>
           {/* KPI Cards */}
@@ -173,167 +165,88 @@ export default function Dashboard() {
             }}>
             <Paper 
               sx={{
-                background: glowBg,
-                border: '1px solid rgba(255, 255, 255, 0.2)',
+                background: cardBg,
+                border: '1px solid'+ glowCol1,
                 p: 3,
                 borderRadius: 4,
-                color: textColor2,
+                color: glowCol1,
                 minWidth: 200,
                 transition: '0.3s',
                 '&:hover': {
                   boxShadow: '0 4px 24px 0 rgba(0,230,254,0.5)',
-                  background: glowBg
+                  //background: glowBg1
                 },
               }}>
               <Typography variant="h6">
                 {reading ? `${reading.kpi.shc_kcal_kg} kcal/kg` : 'Loading...'}
               </Typography>
-              <Typography sx={{ color: textColor2, fontSize: 14 }}>Specific Heat Consumption</Typography>
+              <Typography sx={{ color: glowCol1, fontSize: 14 }}>Specific Heat Consumption</Typography>
             </Paper>
+
+
             <Paper 
               sx={{
-                background: glowBg,
-                border: '1px solid rgba(255, 255, 255, 0.2)',
+                background: cardBg,
+                border: '1px solid '+ glowCol2,
                 p: 3,
                 borderRadius: 4,
-                color: textColor2,
+                color: glowCol2,
                 minWidth: 200,
                 transition: '0.3s',
                 '&:hover': {
-                  boxShadow: '0 4px 24px 0 rgba(0,230,254,0.5)',
-                  background: glowBg
+                  boxShadow: '0 4px 24px 0'+ glowCol2,
+                  //background: glowBg2
                 },
               }}>
               <Typography variant="h6">
                 {reading ? `${reading.kpi.lsf}` : 'Loading...'}
               </Typography>
-              <Typography sx={{ color: textColor2, fontSize: 14 }}>Lime Saturation Factor (LSF)</Typography>
+              <Typography sx={{ color: glowCol2, fontSize: 14 }}>Lime Saturation Factor (LSF)</Typography>
             </Paper>
+
+
             <Paper 
               sx={{
-                background: glowBg,
-                border: '1px solid rgba(255, 255, 255, 0.2)',
+                background: cardBg,
+                border: '1px solid '+ glowCol3,
                 p: 3,
                 borderRadius: 4,
-                color: textColor2,
+                color: glowCol3,
                 minWidth: 200,
                 transition: '0.3s',
                 '&:hover': {
-                  boxShadow: '0 4px 24px 0 rgba(0,230,254,0.5)',
-                  background: glowBg
+                  boxShadow: '0 4px 24px 0'+ glowCol3,
+                  //background: glowBg3
                 },
               }}>
               <Typography variant="h6">
                 {reading ? `${reading.kpi.sec_kwh_ton} kWh/t` : 'Loading...'}
               </Typography>
-              <Typography sx={{ color: textColor2, fontSize: 14 }}>Specific Power Consumption</Typography>
+              <Typography sx={{ color: glowCol3, fontSize: 14 }}>Specific Power Consumption</Typography>
             </Paper>
+
+
             <Paper 
               sx={{
-                background: glowBg,
-                border: '1px solid rgba(255, 255, 255, 0.2)',
+                background: cardBg,
+                border: '1px solid '+ glowCol4,
                 p: 3,
                 borderRadius: 4,
-                color: textColor2,
+                color: glowCol4,
                 minWidth: 200,
                 transition: '0.3s',
                 '&:hover': {
-                  boxShadow: '0 4px 24px 0 rgba(0,230,254,0.5)',
-                  background: glowBg
+                  boxShadow: '0 4px 24px 0'+ glowCol4,
+                  //background: glowBg4
                 },
               }}>
               <Typography variant="h6">
                 {reading ? `${reading.kpi.tsr_pct} %` : 'Loading...'}
               </Typography>
-              <Typography sx={{ color: textColor2, fontSize: 14 }}>TSR (Alt. Fuel Ratio)</Typography>
+              <Typography sx={{ color: glowCol4, fontSize: 14 }}>TSR (Alt. Fuel Ratio)</Typography>
             </Paper>
-          </Box>
+ 
 
-          {/* Second Row of KPI Cards - New Parameters */}
-          <Box 
-            sx={{ 
-              display: 'flex',
-              justifyContent: 'space-between',
-              flexWrap: 'wrap',
-              gap: 3,
-              mb: 2
-            }}>
-            <Paper 
-              sx={{
-                background: glowBg,
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                p: 3,
-                borderRadius: 4,
-                color: textColor2,
-                minWidth: 200,
-                transition: '0.3s',
-                '&:hover': {
-                  boxShadow: '0 4px 24px 0 rgba(0,230,254,0.5)',
-                  background: glowBg
-                },
-              }}>
-              <Typography variant="h6">
-                {reading ? `${reading.raw_mill.mill_throughput_tph} t/h` : 'Loading...'}
-              </Typography>
-              <Typography sx={{ color: textColor2, fontSize: 14 }}>Mill Throughput</Typography>
-            </Paper>
-            <Paper 
-              sx={{
-                background: glowBg,
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                p: 3,
-                borderRadius: 4,
-                color: textColor2,
-                minWidth: 200,
-                transition: '0.3s',
-                '&:hover': {
-                  boxShadow: '0 4px 24px 0 rgba(0,230,254,0.5)',
-                  background: glowBg
-                },
-              }}>
-              <Typography variant="h6">
-                {reading ? `${reading.kiln.kiln_motor_torque_pct} %` : 'Loading...'}
-              </Typography>
-              <Typography sx={{ color: textColor2, fontSize: 14 }}>Kiln Motor Torque</Typography>
-            </Paper>
-            <Paper 
-              sx={{
-                background: glowBg,
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                p: 3,
-                borderRadius: 4,
-                color: textColor2,
-                minWidth: 200,
-                transition: '0.3s',
-                '&:hover': {
-                  boxShadow: '0 4px 24px 0 rgba(0,230,254,0.5)',
-                  background: glowBg
-                },
-              }}>
-              <Typography variant="h6">
-                {reading ? `${reading.kiln.o2_level_pct} %` : 'Loading...'}
-              </Typography>
-              <Typography sx={{ color: textColor2, fontSize: 14 }}>O2 Level</Typography>
-            </Paper>
-            <Paper 
-              sx={{
-                background: glowBg,
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                p: 3,
-                borderRadius: 4,
-                color: textColor2,
-                minWidth: 200,
-                transition: '0.3s',
-                '&:hover': {
-                  boxShadow: '0 4px 24px 0 rgba(0,230,254,0.5)',
-                  background: glowBg
-                },
-              }}>
-              <Typography variant="h6">
-                {reading ? `${reading.production.clinker_temp_c} °C` : 'Loading...'}
-              </Typography>
-              <Typography sx={{ color: textColor2, fontSize: 14 }}>Clinker Temperature</Typography>
-            </Paper>
           </Box>
 
 
