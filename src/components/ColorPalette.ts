@@ -13,6 +13,7 @@ const glowBg1 = 'linear-gradient(135deg, #40DDFF 0%, #0B98C5 100%)';
 const glowBg2 = 'linear-gradient(135deg, #FF409A 0%, #C438EF 100%)';
 const glowBg3 = 'linear-gradient(135deg, #FF7144 0%, #FF8979 100%)';
 const glowBg4 = 'linear-gradient(135deg, #16B4EB 0%, #23E73C 100%)';
+const chatBg = 'linear-gradient(180deg, #242151 74%, #2F2D61 50%)';
 
 
 const glowCol1 = '#0B98C5';
@@ -28,6 +29,7 @@ const col4 = '#048BA8';
 export {
   accent,
   cardBg,
+  chatBg,
   textColor,
   textColor2,
   textColor3,

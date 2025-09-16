@@ -11,7 +11,152 @@ import AllInclusiveIcon from '@mui/icons-material/AllInclusive';
 import VideogameAssetIcon from '@mui/icons-material/VideogameAsset';
 import FactoryIcon from '@mui/icons-material/Factory';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
-import { accent, cardBg, textColor, textColor2, textColor3, gradientBg, glowBg1, glowBg2, glowBg3, glowBg4, glowCol1, glowCol2, glowCol3, glowCol4, shadowDrop, col1, col2, col3, col4 } from '../components/ColorPalette';
+import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment';
+import PowerIcon from '@mui/icons-material/Power';
+import SolarPowerIcon from '@mui/icons-material/SolarPower';
+import LocalShippingIcon from '@mui/icons-material/LocalShipping';
+import MicIcon from '@mui/icons-material/Mic';
+import CloseIcon from '@mui/icons-material/Close';
+import PsychologyIcon from '@mui/icons-material/Psychology';
+
+import { chatBg, accent, cardBg, textColor, menuGrad, textColor2, textColor3, gradientBg, glowBg1, glowBg2, glowBg3, glowBg4, glowCol1, glowCol2, glowCol3, glowCol4, shadowDrop, col1, col2, col3, col4 } from '../components/ColorPalette';
+
+function VoiceChatButton() {
+  const [open, setOpen] = React.useState(false);
+  const [input, setInput] = React.useState('');
+  const [response, setResponse] = React.useState('');
+  const [listening, setListening] = React.useState(false);
+
+  // Voice input
+  const startVoice = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'en-US';
+    recognition.onresult = (event: any) => {
+      setInput(event.results[0][0].transcript);
+    };
+    recognition.start();
+    setListening(true);
+    recognition.onend = () => setListening(false);
+  };
+
+  // Voice output
+  const speak = (text: string) => {
+    const synth = window.speechSynthesis;
+    const utter = new window.SpeechSynthesisUtterance(text);
+    synth.speak(utter);
+  };
+
+  const sendQuery = async () => {
+    const res = await fetch('/api/llm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: input }),
+    });
+    const data = await res.json();
+    setResponse(data.answer);
+    speak(data.answer);
+  };
+
+  return (
+    <>
+      <Box sx={{
+        position: 'fixed',
+        bottom: 60,
+        right: 60,
+        
+        zIndex: 9999,
+        bgcolor: glowBg1,
+        borderRadius: '50%',
+        
+      }}>
+        {/* Pulse Animation */}
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 70,
+            height: 70,
+            borderRadius: '50%',
+            pointerEvents: 'none',
+            zIndex: 0,
+            boxShadow: `0 0 0 0 ${glowCol2}`,
+            animation: 'pulse 1.5s infinite',
+            border: `2px solid ${glowCol2}`,
+          }}
+        />
+        {/* Existing Button */}
+        <Button
+          variant="contained"
+          color="primary"
+          sx={{ borderRadius: '50%', minWidth: 0, width: 70, height: 70, boxShadow: 6, background: glowBg2, padding: '2px', position: 'relative', zIndex: 1 }}
+          onClick={() => setOpen(true)}
+        >
+          <Box
+            sx={{ display: 'flex', alignItems: 'center', transition: 'background 0.5s, color 0.5s', justifyContent: 'center', height: '100%', width: '100%', borderRadius: '50%', background: cardBg,
+              '&:hover': {
+                background: glowBg2, // optional: change background on hover
+                '& .icon-hover': {
+                  color: cardBg, // your desired hover color
+                },
+              },
+             }}
+          >
+            <PsychologyIcon className="icon-hover" sx={{ fontSize: 32, color: glowCol2, transition: 'color 0.2s' }} />
+          </Box>
+        </Button>
+      </Box>
+      {/* Pulse keyframes */}
+      <style>
+        {`
+          @keyframes pulse {
+            0% {
+              box-shadow: 0 0 0 0 ${glowCol2};
+              opacity: 0.7;
+            }
+            70% {
+              box-shadow: 0 0 0 24px rgba(0,230,254,0);
+              opacity: 0;
+            }
+            100% {
+              box-shadow: 0 0 0 0 ${glowCol2};
+              opacity: 0;
+            }
+          }
+        `}
+      </style>
+      {open && (
+        <Box sx={{
+          position: 'fixed',
+          bottom: 140,
+          right: 40,
+          zIndex: 9999,
+          width: 320,
+          background: menuGrad,
+          borderRadius: 4,
+          boxShadow: 8,
+          p: 3,
+        }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography sx={{ color: accent, fontWeight: 700 }}>Talk to LLM</Typography>
+            <IconButton onClick={() => setOpen(false)}><CloseIcon /></IconButton>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+            <Button onClick={startVoice} variant="outlined" color={listening ? 'secondary' : 'primary'}>
+              {listening ? 'Listening...' : 'Voice'}
+            </Button>
+            <Button onClick={sendQuery} variant="contained" color="primary">Send</Button>
+          </Box>
+          <input value={input} onChange={e => setInput(e.target.value)} style={{ width: '100%', marginBottom: 8, padding: 8, borderRadius: 4, border: '1px solid #444', background: cardBg, color: textColor }} />
+          <Box sx={{ color: textColor, minHeight: 40 }}>{response}</Box>
+        </Box>
+      )}
+    </>
+  );
+}
 
 export default function Dashboard() {
   const [reading, setReading] = useState<PlantReading | null>(null);
@@ -116,7 +261,6 @@ export default function Dashboard() {
     return () => { document.body.style.margin = ''; };
   }, []);
 
-
   return (
     <Box sx={{
       minHeight: '100vh',
@@ -163,6 +307,7 @@ export default function Dashboard() {
               gap: 3,
               mb: 2
             }}>
+            
             <Paper 
               sx={{
                 background: cardBg,
@@ -170,6 +315,8 @@ export default function Dashboard() {
                 p: 3,
                 borderRadius: 4,
                 color: glowCol1,
+                display: 'flex',
+                flexDirection: 'row',
                 minWidth: 200,
                 transition: '0.3s',
                 '&:hover': {
@@ -177,10 +324,15 @@ export default function Dashboard() {
                   //background: glowBg1
                 },
               }}>
-              <Typography variant="h6">
-                {reading ? `${reading.kpi.shc_kcal_kg} kcal/kg` : 'Loading...'}
-              </Typography>
-              <Typography sx={{ color: glowCol1, fontSize: 14 }}>Specific Heat Consumption</Typography>
+                <LocalFireDepartmentIcon fontSize="large" sx={{ color: glowCol1 }} />
+                <Box
+                  sx={{ display: 'flex', flexDirection: 'column', ml: 2, justifyContent: 'center' }}
+                >
+                  <Typography variant="h6">
+                  {reading ? `${reading.kpi.shc_kcal_kg} kcal/kg` : 'Loading...'}
+                  </Typography>
+                  <Typography sx={{ color: glowCol1, fontSize: 12 }}>Specific Heat Consumption</Typography>
+                </Box>
             </Paper>
 
 
@@ -191,6 +343,8 @@ export default function Dashboard() {
                 p: 3,
                 borderRadius: 4,
                 color: glowCol2,
+                display: 'flex',
+                flexDirection: 'row',
                 minWidth: 200,
                 transition: '0.3s',
                 '&:hover': {
@@ -198,10 +352,15 @@ export default function Dashboard() {
                   //background: glowBg2
                 },
               }}>
-              <Typography variant="h6">
-                {reading ? `${reading.kpi.lsf}` : 'Loading...'}
-              </Typography>
-              <Typography sx={{ color: glowCol2, fontSize: 14 }}>Lime Saturation Factor (LSF)</Typography>
+              <LocalShippingIcon fontSize="large" sx={{ color: glowCol2 }} />
+              <Box
+                sx={{ display: 'flex', flexDirection: 'column', ml: 2, justifyContent: 'center' }}
+              >
+                <Typography variant="h6">
+                  {reading ? `${reading.kpi.lsf}` : 'Loading...'}
+                </Typography>
+                <Typography sx={{ color: glowCol2, fontSize: 12 }}>Lime Saturation Factor (LSF)</Typography>
+              </Box>
             </Paper>
 
 
@@ -213,16 +372,23 @@ export default function Dashboard() {
                 borderRadius: 4,
                 color: glowCol3,
                 minWidth: 200,
+                display: 'flex',
+                flexDirection: 'row',
                 transition: '0.3s',
                 '&:hover': {
                   boxShadow: '0 4px 24px 0'+ glowCol3,
                   //background: glowBg3
                 },
               }}>
-              <Typography variant="h6">
-                {reading ? `${reading.kpi.sec_kwh_ton} kWh/t` : 'Loading...'}
-              </Typography>
-              <Typography sx={{ color: glowCol3, fontSize: 14 }}>Specific Power Consumption</Typography>
+              <PowerIcon fontSize="large" sx={{ color: glowCol3 }} />
+              <Box
+                sx={{ display: 'flex', flexDirection: 'column', ml: 2, justifyContent: 'center' }}
+              >
+                <Typography variant="h6">
+                  {reading ? `${reading.kpi.sec_kwh_ton} kWh/t` : 'Loading...'}
+                </Typography>
+                <Typography sx={{ color: glowCol3, fontSize: 12 }}>Specific Power Consumption</Typography>
+              </Box>
             </Paper>
 
 
@@ -234,16 +400,23 @@ export default function Dashboard() {
                 borderRadius: 4,
                 color: glowCol4,
                 minWidth: 200,
+                display: 'flex',
+                flexDirection: 'row',
                 transition: '0.3s',
                 '&:hover': {
                   boxShadow: '0 4px 24px 0'+ glowCol4,
                   //background: glowBg4
                 },
               }}>
-              <Typography variant="h6">
-                {reading ? `${reading.kpi.tsr_pct} %` : 'Loading...'}
-              </Typography>
-              <Typography sx={{ color: glowCol4, fontSize: 14 }}>TSR (Alt. Fuel Ratio)</Typography>
+              <SolarPowerIcon fontSize="large" sx={{ color: glowCol4 }} />
+              <Box
+                sx={{ display: 'flex', flexDirection: 'column', ml: 2, justifyContent: 'center' }}
+              >
+                <Typography variant="h6">
+                  {reading ? `${reading.kpi.tsr_pct} %` : 'Loading...'}
+                </Typography>
+                <Typography sx={{ color: glowCol4, fontSize: 12 }}>TSR (Alt. Fuel Ratio)</Typography>
+              </Box>
             </Paper>
  
 
@@ -430,6 +603,8 @@ export default function Dashboard() {
           
         </Box>
       </Box>
+      <VoiceChatButton />
     </Box>
+    
   );
 }
