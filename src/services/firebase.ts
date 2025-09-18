@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "firebase/auth";
+import { getFirestore, collection, addDoc, Timestamp } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -15,6 +16,19 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const analytics = typeof window !== "undefined" ? getAnalytics(app) : undefined;
 export const auth = getAuth(app);
+export const db = getFirestore(app);
+// Store a conversation in Firestore
+export async function storeConversation(query: string, response: string) {
+  try {
+    await addDoc(collection(db, "conversations"), {
+      query,
+      response,
+      timestamp: Timestamp.now(),
+    });
+  } catch (e) {
+    console.error("Error storing conversation:", e);
+  }
+}
 
 export async function login(email: string, password: string) {
   return signInWithEmailAndPassword(auth, email, password);
