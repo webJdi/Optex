@@ -18,6 +18,7 @@ import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import MicIcon from '@mui/icons-material/Mic';
 import CloseIcon from '@mui/icons-material/Close';
 import PsychologyIcon from '@mui/icons-material/Psychology';
+import SendIcon from '@mui/icons-material/Send';
 
 import { chatBg, accent, cardBg, textColor, menuGrad, textColor2, textColor3, gradientBg, glowBg1, glowBg2, glowBg3, glowBg4, glowCol1, glowCol2, glowCol3, glowCol4, shadowDrop, col1, col2, col3, col4 } from '../components/ColorPalette';
 
@@ -26,6 +27,7 @@ function VoiceChatButton() {
   const [input, setInput] = React.useState('');
   const [response, setResponse] = React.useState('');
   const [listening, setListening] = React.useState(false);
+  const [voiceSent, setVoiceSent] = React.useState(false);
 
   // Voice input
   const startVoice = () => {
@@ -35,10 +37,17 @@ function VoiceChatButton() {
     recognition.lang = 'en-US';
     recognition.onresult = (event: any) => {
       setInput(event.results[0][0].transcript);
+      setVoiceSent(true);
     };
     recognition.start();
     setListening(true);
-    recognition.onend = () => setListening(false);
+    recognition.onend = () => {
+      setListening(false);
+      // Automatically send query when speaker stops
+      setTimeout(() => {
+        if (input) sendQuery();
+      }, 100);
+    };
   };
 
   // Voice output
@@ -64,12 +73,10 @@ function VoiceChatButton() {
       <Box sx={{
         position: 'fixed',
         bottom: 60,
-        right: 60,
-        
+        right: 120,
         zIndex: 9999,
         bgcolor: glowBg1,
         borderRadius: '50%',
-        
       }}>
         {/* Pulse Animation */}
         <Box
@@ -88,26 +95,99 @@ function VoiceChatButton() {
             border: `2px solid ${glowCol2}`,
           }}
         />
-        {/* Existing Button */}
+        {/* Floating Button */}
         <Button
           variant="contained"
           color="primary"
-          sx={{ borderRadius: '50%', minWidth: 0, width: 70, height: 70, boxShadow: 6, background: glowBg2, padding: '2px', position: 'relative', zIndex: 1 }}
-          onClick={() => setOpen(true)}
+          sx={{
+            borderRadius: '50%',
+            minWidth: 0,
+            width: 70,
+            height: 70,
+            boxShadow: 6,
+            background: glowBg2,
+            padding: '2px',
+            position: 'relative',
+            zIndex: 1,
+          }}
+          onClick={() => {
+            setOpen(true);
+            startVoice();
+          }}
         >
           <Box
-            sx={{ display: 'flex', alignItems: 'center', transition: 'background 0.5s, color 0.5s', justifyContent: 'center', height: '100%', width: '100%', borderRadius: '50%', background: cardBg,
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              transition: 'background 0.5s, color 0.5s',
+              justifyContent: 'center',
+              height: '100%',
+              width: '100%',
+              borderRadius: '50%',
+              background: cardBg,
               '&:hover': {
-                background: glowBg2, // optional: change background on hover
+                background: glowBg2,
                 '& .icon-hover': {
-                  color: cardBg, // your desired hover color
+                  color: cardBg,
                 },
               },
-             }}
+            }}
           >
-            <PsychologyIcon className="icon-hover" sx={{ fontSize: 32, color: glowCol2, transition: 'color 0.2s' }} />
+            {open ? (
+              <MicIcon className="icon-hover" sx={{ fontSize: 32, color: glowCol2, transition: 'color 0.2s' }} />
+            ) : (
+              <PsychologyIcon className="icon-hover" sx={{ fontSize: 32, color: glowCol2, transition: 'color 0.2s' }} />
+            )}
           </Box>
         </Button>
+        {/* Text bubble above button */}
+        {voiceSent && (
+          <Box
+            sx={{
+              position: 'absolute',
+              bottom: 80,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              bgcolor: 'rgba(38, 34, 79, 0.7)',
+              color: textColor,
+              px: 2,
+              py: 3,
+              borderRadius: '20px',
+              boxShadow: 4,
+              minWidth: 220,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              fontSize: 16,
+              zIndex: 2,
+              border: `1px solid ${glowCol2}`,
+              transition: 'opacity 0.3s',
+            }}
+          >
+            <span style={{ flex: 1, fontSize: 14 }}>{input}</span>
+            <Button
+              variant="contained"
+              color="primary"
+              size="small"
+              
+              sx={{
+                borderRadius: 12,
+                minWidth: 0,
+                px: 1.5,
+                py: 0.5,
+                fontSize: 14,
+                boxShadow: 2,
+                background: 'transparent',
+                '&:hover': {
+                  background: 'rgba(255, 255, 255, 0.1)',
+                }
+              }}
+              onClick={sendQuery}
+            >
+              <SendIcon />
+            </Button>
+          </Box>
+        )}
       </Box>
       {/* Pulse keyframes */}
       <style>
@@ -128,32 +208,6 @@ function VoiceChatButton() {
           }
         `}
       </style>
-      {open && (
-        <Box sx={{
-          position: 'fixed',
-          bottom: 140,
-          right: 40,
-          zIndex: 9999,
-          width: 320,
-          background: menuGrad,
-          borderRadius: 4,
-          boxShadow: 8,
-          p: 3,
-        }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography sx={{ color: accent, fontWeight: 700 }}>Talk to LLM</Typography>
-            <IconButton onClick={() => setOpen(false)}><CloseIcon /></IconButton>
-          </Box>
-          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-            <Button onClick={startVoice} variant="outlined" color={listening ? 'secondary' : 'primary'}>
-              {listening ? 'Listening...' : 'Voice'}
-            </Button>
-            <Button onClick={sendQuery} variant="contained" color="primary">Send</Button>
-          </Box>
-          <input value={input} onChange={e => setInput(e.target.value)} style={{ width: '100%', marginBottom: 8, padding: 8, borderRadius: 4, border: '1px solid #444', background: cardBg, color: textColor }} />
-          <Box sx={{ color: textColor, minHeight: 40 }}>{response}</Box>
-        </Box>
-      )}
     </>
   );
 }
