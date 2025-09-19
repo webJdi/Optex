@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { storeConversation, auth } from '../services/firebase';
 import { fetchPlantReading, PlantReading } from '../services/plantApi';
 import { historizePlantReading, getHistoricalData } from '../services/plantHistory';
 import { Box, Typography, Paper, Button, FormControl, InputLabel, Select, MenuItem, IconButton } from '@mui/material';
@@ -19,6 +20,7 @@ import MicIcon from '@mui/icons-material/Mic';
 import CloseIcon from '@mui/icons-material/Close';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import SendIcon from '@mui/icons-material/Send';
+import VoiceOverOffIcon from '@mui/icons-material/VoiceOverOff';
 
 import { chatBg, accent, cardBg, textColor, menuGrad, textColor2, textColor3, gradientBg, glowBg1, glowBg2, glowBg3, glowBg4, glowCol1, glowCol2, glowCol3, glowCol4, shadowDrop, col1, col2, col3, col4 } from '../components/ColorPalette';
 
@@ -28,6 +30,7 @@ function VoiceChatButton() {
   const [response, setResponse] = React.useState('');
   const [listening, setListening] = React.useState(false);
   const [voiceSent, setVoiceSent] = React.useState(false);
+  const [speaking, setSpeaking] = React.useState(false);
 
   // Voice input
   const startVoice = () => {
@@ -54,7 +57,19 @@ function VoiceChatButton() {
   const speak = (text: string) => {
     const synth = window.speechSynthesis;
     const utter = new window.SpeechSynthesisUtterance(text);
+    setSpeaking(true);
+    utter.onend = () => {
+      setSpeaking(false);
+    };
     synth.speak(utter);
+  };
+
+  const stopSpeaking = () => {
+    window.speechSynthesis.cancel();
+    setSpeaking(false);
+    setOpen(false);
+    setInput('');
+    setVoiceSent(false);
   };
 
   const sendQuery = async () => {
@@ -63,11 +78,18 @@ function VoiceChatButton() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: input }),
     });
-    const data = await res.json();
-    setResponse(data.answer);
-    speak(data.answer);
+    let answer = (await res.json()).answer;
+    // Remove asterisks from response
+    answer = answer.replace(/\*/g, '').trim();
+    setResponse(answer);
+    speak(answer);
+    // Store query and cleaned response in Firestore
+  const userId = auth.currentUser?.uid || 'anonymous';
+  storeConversation(input, answer, userId);
+    // Prepare for next command
+    setVoiceSent(false);
+    setInput('');
   };
-
   return (
     <>
       <Box sx={{
@@ -111,8 +133,12 @@ function VoiceChatButton() {
             zIndex: 1,
           }}
           onClick={() => {
-            setOpen(true);
-            startVoice();
+            if (speaking) {
+              stopSpeaking();
+            } else {
+              setOpen(true);
+              startVoice();
+            }
           }}
         >
           <Box
@@ -133,7 +159,9 @@ function VoiceChatButton() {
               },
             }}
           >
-            {open ? (
+            {speaking ? (
+              <VoiceOverOffIcon className="icon-hover" sx={{ fontSize: 32, color: glowCol2, transition: 'color 0.2s' }} />
+            ) : open ? (
               <MicIcon className="icon-hover" sx={{ fontSize: 32, color: glowCol2, transition: 'color 0.2s' }} />
             ) : (
               <PsychologyIcon className="icon-hover" sx={{ fontSize: 32, color: glowCol2, transition: 'color 0.2s' }} />
@@ -148,28 +176,26 @@ function VoiceChatButton() {
               bottom: 80,
               left: '50%',
               transform: 'translateX(-50%)',
-              bgcolor: 'rgba(38, 34, 79, 0.7)',
+              bgcolor: cardBg,
               color: textColor,
               px: 2,
-              py: 3,
-              borderRadius: '20px',
+              py: 1,
+              borderRadius: 16,
               boxShadow: 4,
-              minWidth: 220,
+              minWidth: 250,
               display: 'flex',
               alignItems: 'center',
               gap: 1,
               fontSize: 16,
               zIndex: 2,
-              border: `1px solid ${glowCol2}`,
               transition: 'opacity 0.3s',
             }}
           >
-            <span style={{ flex: 1, fontSize: 14 }}>{input}</span>
+            <span style={{ flex: 1 }}>{input}</span>
             <Button
               variant="contained"
               color="primary"
               size="small"
-              
               sx={{
                 borderRadius: 12,
                 minWidth: 0,
@@ -177,10 +203,6 @@ function VoiceChatButton() {
                 py: 0.5,
                 fontSize: 14,
                 boxShadow: 2,
-                background: 'transparent',
-                '&:hover': {
-                  background: 'rgba(255, 255, 255, 0.1)',
-                }
               }}
               onClick={sendQuery}
             >
@@ -188,10 +210,8 @@ function VoiceChatButton() {
             </Button>
           </Box>
         )}
-      </Box>
-      {/* Pulse keyframes */}
-      <style>
-        {`
+        {/* Pulse keyframes */}
+        <style>{`
           @keyframes pulse {
             0% {
               box-shadow: 0 0 0 0 ${glowCol2};
@@ -206,8 +226,8 @@ function VoiceChatButton() {
               opacity: 0;
             }
           }
-        `}
-      </style>
+        `}</style>
+      </Box>
     </>
   );
 }
