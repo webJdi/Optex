@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FormControl, Select, MenuItem } from '@mui/material';
+import { FormControl, Select, MenuItem, SelectChangeEvent } from '@mui/material';
 import Sidebar from '../components/Sidebar';
 import { Box, Typography, Paper, Button, CircularProgress } from '@mui/material';
 import WhatshotIcon from '@mui/icons-material/Whatshot';
@@ -9,11 +9,24 @@ import BoltIcon from '@mui/icons-material/Bolt';
 import { accent, cardBg, textColor, textColor2, gradientBg, shadowDrop, col1, col2, col3, col4 } from '../components/ColorPalette';
 import PageHeader from '../components/PageHeader';
 
+// Type definitions for optimizer
+interface OptimizationTarget {
+  [key: string]: number;
+}
+
+interface OptimizerResult {
+  suggested_targets?: OptimizationTarget;
+  model_type?: string;
+  optimization_score?: number;
+  error?: string;
+}
+
+type SectionType = 'Raw Materials & Grinding' | 'Clinkerization';
 
 export default function Optimizer() {
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
-  const [section, setSection] = useState<'Raw Materials & Grinding' | 'Clinkerization'>('Clinkerization');
+  const [result, setResult] = useState<OptimizerResult | null>(null);
+  const [section, setSection] = useState<SectionType>('Clinkerization');
   const [timer, setTimer] = useState<number>(300); // 5 min in seconds
   const [running, setRunning] = useState(false);
   
@@ -74,7 +87,7 @@ export default function Optimizer() {
       const res = await fetch(`http://localhost:8000/optimize_targets?segment=${encodeURIComponent(section)}`);
       const data = await res.json();
       setResult(data);
-    } catch (e) {
+    } catch {
       setResult({ error: 'Failed to run optimizer.' });
     }
     setLoading(false);
@@ -117,7 +130,7 @@ export default function Optimizer() {
             <FormControl variant="standard" sx={{ minWidth: 220 }}>
               <Select
                 value={section}
-                onChange={e => setSection(e.target.value as any)}
+                onChange={(e: SelectChangeEvent) => setSection(e.target.value as SectionType)}
                 sx={{ color: accent, fontWeight: 700, fontSize: 16, background: cardBg, borderRadius: 2 }}
               >
                 <MenuItem value="Raw Materials & Grinding">Raw Materials & Grinding</MenuItem>

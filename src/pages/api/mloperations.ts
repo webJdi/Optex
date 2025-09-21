@@ -2,6 +2,47 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { retrieveContext } from '../../services/rag';
 
+// Interface definitions for type safety
+interface ConversationMessage {
+  type: string;
+  content: string;
+}
+
+interface DatasetInfo {
+  name: string;
+  rows: number;
+  columns: number;
+  size: string;
+  types: Record<string, string>;
+}
+
+interface ModelInfo {
+  name: string;
+  type: string;
+  accuracy: number;
+  features: string[];
+}
+
+interface CleaningParameters {
+  method: string;
+  strategy?: string;
+}
+
+interface TrainingParameters {
+  algorithm?: string;
+  target_column?: string;
+}
+
+interface RequestBody {
+  operation: string;
+  query?: string;
+  parameters?: CleaningParameters | TrainingParameters;
+  datasetPath?: string;
+  datasetInfo?: DatasetInfo;
+  modelInfo?: ModelInfo;
+  conversationHistory?: ConversationMessage[];
+}
+
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -12,34 +53,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { operation, query, parameters, datasetPath } = req.body;
+    const { operation, query, parameters, datasetPath }: RequestBody = req.body;
 
     switch (operation) {
       case 'analyze':
-        return await performDataAnalysis(req, res, datasetPath);
+        return await performDataAnalysis(req, res, datasetPath || '');
       
       case 'clean':
-        return await performDataCleaning(req, res, datasetPath, parameters);
+        return await performDataCleaning(req, res, datasetPath || '', parameters as CleaningParameters || {});
       
       case 'train':
-        return await performModelTraining(req, res, datasetPath, parameters);
+        return await performModelTraining(req, res, datasetPath || '', parameters as TrainingParameters || {});
       
       case 'query':
       default:
         // For general queries, use Gemini
-        return await handleGeneralQuery(req, res, query);
+        return await handleGeneralQuery(req, res, query || '');
     }
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('ML Operations API Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({ 
       error: "Failed to execute ML operation",
-      details: error?.message || 'Unknown error' 
+      details: errorMessage
     });
   }
 }
 
-async function performDataAnalysis(req: NextApiRequest, res: NextApiResponse, datasetPath: string) {
+async function performDataAnalysis(req: NextApiRequest, res: NextApiResponse, _datasetPath: string) {
   try {
     // Simulate realistic data analysis results
     const mockAnalysisData = {
@@ -95,7 +137,7 @@ async function performDataAnalysis(req: NextApiRequest, res: NextApiResponse, da
     
     Dataset: ${mockAnalysisData.shape[0]} rows × ${mockAnalysisData.shape[1]} columns
     Key Variables: cement strength, water ratio, aggregate ratio, curing time, temperature, humidity
-    Missing Values: ${Object.entries(mockAnalysisData.missing_values).filter(([col, count]) => count > 0).length} columns affected
+    Missing Values: ${Object.entries(mockAnalysisData.missing_values).filter(([, count]) => count > 0).length} columns affected
     Strong Correlations: cement_strength ↔ water_ratio (-0.67), cement_strength ↔ curing_time (0.73)
     Quality Grades: A(523), B(398), C(298), D(28)
     
@@ -123,12 +165,13 @@ async function performDataAnalysis(req: NextApiRequest, res: NextApiResponse, da
       timestamp: new Date().toISOString()
     });
 
-  } catch (error: any) {
-    res.status(500).json({ error: 'Analysis failed', details: error.message });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: 'Analysis failed', details: errorMessage });
   }
 }
 
-async function performDataCleaning(req: NextApiRequest, res: NextApiResponse, datasetPath: string, parameters: any) {
+async function performDataCleaning(req: NextApiRequest, res: NextApiResponse, datasetPath: string, parameters: CleaningParameters) {
   try {
     const { method, strategy } = parameters;
     
@@ -188,12 +231,13 @@ async function performDataCleaning(req: NextApiRequest, res: NextApiResponse, da
       timestamp: new Date().toISOString()
     });
 
-  } catch (error: any) {
-    res.status(500).json({ error: 'Cleaning failed', details: error.message });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: 'Cleaning failed', details: errorMessage });
   }
 }
 
-async function performModelTraining(req: NextApiRequest, res: NextApiResponse, datasetPath: string, parameters: any) {
+async function performModelTraining(req: NextApiRequest, res: NextApiResponse, datasetPath: string, parameters: TrainingParameters) {
   try {
     const { algorithm = 'random_forest', target_column = 'cement_strength' } = parameters;
     
@@ -201,7 +245,7 @@ async function performModelTraining(req: NextApiRequest, res: NextApiResponse, d
     const problemType = target_column === 'quality_grade' ? 'classification' : 'regression';
     
     // Simulate realistic training results
-    let mainMetric: number, metrics: any, cvScores: number[];
+    let mainMetric: number, metrics: Record<string, number>, cvScores: number[];
     
     if (problemType === 'classification') {
       mainMetric = 0.87 + (Math.random() * 0.1); // 87-97% accuracy
@@ -287,8 +331,9 @@ async function performModelTraining(req: NextApiRequest, res: NextApiResponse, d
       timestamp: new Date().toISOString()
     });
 
-  } catch (error: any) {
-    res.status(500).json({ error: 'Training failed', details: error.message });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: 'Training failed', details: errorMessage });
   }
 }
 
@@ -321,7 +366,7 @@ async function handleGeneralQuery(req: NextApiRequest, res: NextApiResponse, que
     let chatHistory = '';
     if (conversationHistory && conversationHistory.length > 0) {
       chatHistory = '\nRecent conversation:\n' + 
-        conversationHistory.slice(-6).map((msg: any) => 
+        conversationHistory.slice(-6).map((msg: ConversationMessage) => 
           `${msg.type}: ${msg.content.substring(0, 200)}${msg.content.length > 200 ? '...' : ''}`
         ).join('\n');
     }
@@ -358,7 +403,8 @@ async function handleGeneralQuery(req: NextApiRequest, res: NextApiResponse, que
       message: response,
       timestamp: new Date().toISOString()
     });
-  } catch (error: any) {
-    res.status(500).json({ error: 'Query failed', details: error.message });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({ error: 'Query failed', details: errorMessage });
   }
 }

@@ -2,6 +2,12 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { retrieveContext } from '../../services/rag';
 import { NextApiRequest, NextApiResponse } from 'next';
 
+// Interface for conversation history messages
+interface ConversationMessage {
+  type: string;
+  content: string;
+}
+
 // Initialize Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
@@ -49,7 +55,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let chatHistory = '';
     if (conversationHistory && conversationHistory.length > 0) {
       chatHistory = '\nRecent conversation:\n' + 
-        conversationHistory.slice(-6).map((msg: any) => 
+        conversationHistory.slice(-6).map((msg: ConversationMessage) => 
           `${msg.type}: ${msg.content.substring(0, 200)}${msg.content.length > 200 ? '...' : ''}`
         ).join('\n');
     }
@@ -89,11 +95,12 @@ Respond as a professional data scientist would, providing intelligent insights a
       timestamp: new Date().toISOString() 
     });
 
-  } catch (error: any) {
+  } catch (error) {
     console.error('ML Builder API Error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({ 
       error: "Failed to generate response",
-      details: error?.message || 'Unknown error' 
+      details: errorMessage
     });
   }
 }
