@@ -263,22 +263,9 @@ export default function SoftSensorDetail() {
                       },
         }}>
           {/* Header with Back Button */}
-          <Box sx={{ display: 'flex', alignItems: 'space-between', gap: 2, mb: 2 }}>
-            <IconButton
-              onClick={() => router.push('/softsensors')}
-              sx={{
-                color: textColor3,
-                '&:hover': {
-                  color: currentSensor.color,
-                  background: `${currentSensor.color}20`
-                }
-              }}
-            >
-              <ArrowBackIcon />
-            </IconButton>
+            
             <PageHeader pageName={currentSensor.name} />
-          </Box>
-
+          
           {/* Sensor Overview */}
           <Box sx={{
             background: cardBg,
