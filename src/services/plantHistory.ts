@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { getFirestore, setDoc, doc, Timestamp, query, orderBy, limit, getDocs, collection, QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
+import { getFirestore, setDoc, doc, Timestamp, query, orderBy, limit, getDocs, collection } from "firebase/firestore";
+import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import { app } from "./firebase";
 
 const db = getFirestore(app);
@@ -68,7 +69,7 @@ export async function getHistoricalData(limitCount: number = 50) {
     );
     const querySnapshot = await getDocs(q);
     const data: any[] = [];
-    querySnapshot.forEach((doc) => {
+    querySnapshot.forEach((doc: any) => {
       const docData = doc.data();
       data.push({
         ...docData,
