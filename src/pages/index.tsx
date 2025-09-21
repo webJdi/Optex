@@ -1,10 +1,7 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, TextField, Button, Paper } from '@mui/material';
 import { useRouter } from 'next/router';
 import { login } from '../services/firebase';
-import PageHeader from '../components/PageHeader';
-import { relative } from 'path';
 
 const bgGradient = 'linear-gradient(135deg, #a259ec 0%, #6a82fb 100%)';
 const cardBg = 'rgba(24, 28, 56, 0.95)';
@@ -144,7 +141,7 @@ export default function LoginPage() {
                 
                 <Box sx={{ textAlign: 'center', mt: 2 }}>
                   <Typography sx={{ color: textColor, fontSize: 14 }}>
-                    Don't have an account?{' '}
+                    Don&apos;t have an account?{' '}
                     <Button 
                       variant="text" 
                       sx={{ 
