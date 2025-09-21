@@ -625,9 +625,6 @@ ${data.insights}
           overflow: 'hidden',
           fontFamily: `'Montserrat', sans-serif`,
         }}>
-
-
-
           <Box sx={{
             width: { xs: '100%', md: '95vw' },
             height: {xs: '100%', md: '90vh' },
@@ -636,7 +633,7 @@ ${data.insights}
             display: 'flex',
             flexDirection: 'row',
             overflow: 'hidden',
-            boxShadow: shadowDrop,
+            boxShadow: shadowDrop
           }}>
 
         <Sidebar />
@@ -648,13 +645,11 @@ ${data.insights}
           p: 4,
           display: 'flex',
           flexDirection: 'column',
-          gap: 4,
-          overflow: 'auto'
+          gap: 1,
+          mt: 8
         }}>
           {/* Header */}
-          <Box sx={{ mb: 1 }}>
-            <PageHeader pageName="AI Model Builder" />
-          </Box>
+          <PageHeader pageName="AI Model Builder" />
 
 
           {/* Status Bar */}

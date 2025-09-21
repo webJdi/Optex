@@ -77,7 +77,7 @@ export default function LoginPage() {
                 <Paper
                   sx={{
                     position: 'absolute',
-                    background: 'url(/cement.png)',
+                    background: 'url(/cement2.png)',
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
                     backgroundRepeat: 'no-repeat',
