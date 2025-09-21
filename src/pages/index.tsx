@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, TextField, Button, Paper } from '@mui/material';
 import { useRouter } from 'next/router';

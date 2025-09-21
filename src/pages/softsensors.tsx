@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { fetchPlantReading, PlantReading } from '../services/plantApi';

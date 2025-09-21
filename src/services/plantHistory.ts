@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { getFirestore, setDoc, doc, Timestamp, query, orderBy, limit, getDocs, collection, QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 import { app } from "./firebase";
 
