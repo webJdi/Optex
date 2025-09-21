@@ -59,7 +59,7 @@ export default function Sidebar() {
                   }
                 }}
               >
-                <DashboardIcon /> <Typography fontSize={'0.9em'}>Dashboard</Typography>
+                <DashboardIcon /> <Typography fontSize={'0.9em'} sx={{fontFamily: `'Montserrat', sans-serif`}}>Dashboard</Typography>
               </Button>
             </ListItem>
             <ListItem>
@@ -79,7 +79,7 @@ export default function Sidebar() {
                   }
                 }}
               >
-                <AllInclusiveIcon /> <Typography fontSize={'0.9em'}>Soft Sensors</Typography>
+                <AllInclusiveIcon /> <Typography fontSize={'0.9em'} sx={{fontFamily: `'Montserrat', sans-serif`}}>Soft Sensors</Typography>
               </Button>
             </ListItem>
             <ListItem>
@@ -92,7 +92,7 @@ export default function Sidebar() {
                     }
                   }}
                 >
-                  <FactoryIcon /> <Typography fontSize={'0.9em'}>Optimizer</Typography>
+                  <FactoryIcon /> <Typography fontSize={'0.9em'} sx={{fontFamily: `'Montserrat', sans-serif`}}>Optimizer</Typography>
                 </Button>
             </ListItem>
             <ListItem>
@@ -105,7 +105,7 @@ export default function Sidebar() {
                     }
                   }}
                 >
-                  <VideogameAssetIcon /> <Typography fontSize={'0.9em'}>Simulation</Typography>
+                  <VideogameAssetIcon /> <Typography fontSize={'0.9em'} sx={{fontFamily: `'Montserrat', sans-serif`}}>Simulation</Typography>
                 </Button>
             </ListItem>
             <ListItem>
@@ -118,7 +118,7 @@ export default function Sidebar() {
                     }
                   }}
                 >
-                  <SmartToyIcon /> <Typography fontSize={'0.9em'}>Co-Pilot</Typography>
+                  <SmartToyIcon /> <Typography fontSize={'0.9em'} sx={{fontFamily: `'Montserrat', sans-serif`}}>Co-Pilot</Typography>
                 </Button>
             </ListItem>
             <ListItem>
@@ -131,7 +131,7 @@ export default function Sidebar() {
                     }
                   }}
                 >
-                  <BuildIcon /> <Typography fontSize={'0.9em'}>Model Builder</Typography>
+                  <BuildIcon /> <Typography fontSize={'0.9em'} sx={{fontFamily: `'Montserrat', sans-serif`}}>Model Builder</Typography>
                 </Button>
             </ListItem>
       </List>

@@ -7,6 +7,7 @@ import SpeedIcon from '@mui/icons-material/Speed';
 import ScienceIcon from '@mui/icons-material/Science';
 import BoltIcon from '@mui/icons-material/Bolt';
 import { accent, cardBg, textColor, textColor2, gradientBg, shadowDrop, col1, col2, col3, col4 } from '../components/ColorPalette';
+import PageHeader from '../components/PageHeader';
 
 
 export default function Optimizer() {
@@ -106,7 +107,8 @@ export default function Optimizer() {
       }}>
         <Sidebar />
         {/* Main Content */}
-        <Box sx={{ flex: 1, p: 5, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <Box sx={{ flex: 1, p: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <PageHeader pageName="Optimizer" />
           {/* Header Row with Dropdown */}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
             <Typography variant="h4" sx={{fontFamily: `'Montserrat', sans-serif`, color: textColor, fontWeight: 400 }}>

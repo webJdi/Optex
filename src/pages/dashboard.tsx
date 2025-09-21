@@ -21,6 +21,8 @@ import CloseIcon from '@mui/icons-material/Close';
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import SendIcon from '@mui/icons-material/Send';
 import VoiceOverOffIcon from '@mui/icons-material/VoiceOverOff';
+import Person2Icon from '@mui/icons-material/Person2';
+import PageHeader from '../components/PageHeader';
 
 import { chatBg, accent, cardBg, textColor, menuGrad, textColor2, textColor3, gradientBg, glowBg1, glowBg2, glowBg3, glowBg4, glowCol1, glowCol2, glowCol3, glowCol4, shadowDrop, col1, col2, col3, col4 } from '../components/ColorPalette';
 
@@ -32,7 +34,7 @@ function VoiceChatButton() {
   const [voiceSent, setVoiceSent] = React.useState(false);
   const [speaking, setSpeaking] = React.useState(false);
 
-  // Voice input
+  // Voice input Segment
   const startVoice = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) return;
@@ -46,10 +48,10 @@ function VoiceChatButton() {
     setListening(true);
     recognition.onend = () => {
       setListening(false);
-      // Automatically send query when speaker stops
+      // To send automatic query when speaker stops; The timeout (set at 0.5s) can be changed based on requirements; 
       setTimeout(() => {
         if (input) sendQuery();
-      }, 100);
+      }, 500);
     };
   };
 
@@ -268,7 +270,7 @@ export default function Dashboard() {
   }, []);
 
   const getChartData = () => {
-    return historicalData.map(item => {
+    return historicalData.map((item, itemIndex) => {
       const dataPoint: any = {
         time: new Date(item.timestamp).toLocaleTimeString(),
       };
@@ -277,7 +279,9 @@ export default function Dashboard() {
         const value = kpi.includes('.') ? 
           kpi.split('.').reduce((o: any, i: string) => o && o[i], item) : 
           item[kpi];
-        dataPoint[`value${index}`] = value;
+        // Add tiny variations for steady values to ensure line visibility
+        const variation = (itemIndex % 2 === 0 ? 0.001 : -0.001);
+        dataPoint[`value${index}`] = value + variation;
       });
       
       return dataPoint;
@@ -368,10 +372,7 @@ export default function Dashboard() {
           gap: 1,
         }}>
           {/* Header */}
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-            <Typography variant="h4" sx={{fontFamily: `'Montserrat', sans-serif`, color: textColor, fontWeight: 400 }}>Dashboard</Typography>
-            <Button sx={{ background: accent, color: '#222', borderRadius: 3, fontWeight: 700, textTransform: 'none' }}>Profile</Button>
-          </Box>
+          <PageHeader pageName="Dashboard" />
           {/* KPI Cards */}
           <Box 
             sx={{ 
@@ -546,7 +547,15 @@ export default function Dashboard() {
                         tickLine={false}
                         tick={{ fill: '#b6d4e3', fontWeight: 500 }}
                         width={40}
-                        domain={[dataMin => Math.floor(dataMin * 0.98), dataMax => Math.ceil(dataMax * 1.02)]}
+                        domain={[(dataMin: number) => {
+                          const calculated = Math.floor(dataMin * 0.98);
+                          const range = Math.ceil(dataMin * 1.02) - calculated;
+                          return range < 0.01 ? calculated - 1 : calculated;
+                        }, (dataMax: number) => {
+                          const calculated = Math.ceil(dataMax * 1.02);
+                          const range = calculated - Math.floor(dataMax * 0.98);
+                          return range < 0.01 ? calculated + 1 : calculated;
+                        }]}
                       />
                       {selectedKpis.length > 1 && (
                         <YAxis 
@@ -558,7 +567,15 @@ export default function Dashboard() {
                           tickLine={false}
                           tick={{ fill: '#ea67cf', fontWeight: 500 }}
                           width={40}
-                          domain={[dataMin => Math.floor(dataMin * 0.98), dataMax => Math.ceil(dataMax * 1.02)]}
+                          domain={[(dataMin: number) => {
+                            const calculated = Math.floor(dataMin * 0.98);
+                            const range = Math.ceil(dataMin * 1.02) - calculated;
+                            return range < 0.01 ? calculated - 1 : calculated;
+                          }, (dataMax: number) => {
+                            const calculated = Math.ceil(dataMax * 1.02);
+                            const range = calculated - Math.floor(dataMax * 0.98);
+                            return range < 0.01 ? calculated + 1 : calculated;
+                          }]}
                         />
                       )}
                       <CartesianGrid stroke="rgba(255,255,255,0.07)" vertical={false} />
@@ -590,7 +607,8 @@ export default function Dashboard() {
                           yAxisId={index === 0 ? "left" : "right"}
                           name={kpiOptions.find(opt => opt.value === kpi)?.label || kpi}
                           filter="url(#neon-glow)"
-                          strokeOpacity={0.5}
+                          strokeOpacity={0.9}
+                          connectNulls={true}
                         />
                       ))}
                     </LineChart>

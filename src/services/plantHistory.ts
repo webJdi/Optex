@@ -1,4 +1,3 @@
-
 import { getFirestore, setDoc, doc, Timestamp, query, orderBy, limit, getDocs, collection } from "firebase/firestore";
 import { app } from "./firebase";
 
@@ -78,6 +77,49 @@ export async function getHistoricalData(limitCount: number = 50) {
     return data.reverse(); // Return in chronological order
   } catch (e) {
     console.error("Error fetching historical data", e);
+    return [];
+  }
+}
+
+export interface PredictionResponse {
+  strength_mpa: number;
+  lsf_predicted: number;
+  free_lime_pct: number;
+  blaine_cm2_g: number;
+  prediction_confidence: string;
+}
+
+export async function historizeSoftSensorReading(timestamp: number, prediction: PredictionResponse) {
+  try {
+    const docRef = doc(db, "soft_sensor_readings", String(timestamp));
+    await setDoc(docRef, {
+      timestamp: Timestamp.fromMillis(timestamp * 1000),
+      ...prediction
+    });
+  } catch (e) {
+    console.error("Error adding soft sensor reading to Firestore", e);
+  }
+}
+
+export async function getSoftSensorHistoricalData(limitCount: number = 50) {
+  try {
+    const q = query(
+      collection(db, "soft_sensor_readings"),
+      orderBy("timestamp", "desc"),
+      limit(limitCount)
+    );
+    const querySnapshot = await getDocs(q);
+    const data: any[] = [];
+    querySnapshot.forEach((doc: any) => {
+      const docData = doc.data();
+      data.push({
+        ...docData,
+        timestamp: docData.timestamp.toDate().getTime(),
+      });
+    });
+    return data.reverse(); // Return in chronological order
+  } catch (e) {
+    console.error("Error fetching soft sensor historical data", e);
     return [];
   }
 }

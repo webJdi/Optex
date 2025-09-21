@@ -1,52 +1,96 @@
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/router';
 import { fetchPlantReading, PlantReading } from '../services/plantApi';
 import { fetchMLPredictions, PredictionResponse } from '../services/mlPredictions';
-import { getHistoricalData } from '../services/plantHistory';
+import { getSoftSensorHistoricalData, historizeSoftSensorReading } from '../services/plantHistory';
 import { Box, Typography, Paper } from '@mui/material';
-import { LineChart, Line, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, ResponsiveContainer, YAxis } from 'recharts';
 import Sidebar from '../components/Sidebar';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
-import { accent, cardBg, textColor, textColor2, textColor3, gradientBg, glowBg1, glowBg2, glowBg3, glowBg4, shadowDrop, col1, col2, col3, col4 } from '../components/ColorPalette';
+import PageHeader from '../components/PageHeader';
+import { accent, cardBg, textColor, textColor2, textColor3, gradientBg, glowBg1, glowBg2, glowBg3, glowBg4, shadowDrop, col1, col2, col3, col4, glowCol1, glowCol2, glowCol3, glowCol4 } from '../components/ColorPalette';
 
+// Type definitions
+interface SoftSensorData {
+  timestamp: number;
+  strength_mpa?: number;
+  lsf_predicted?: number;
+  free_lime_pct?: number;
+  free_lime?: number;
+  blaine_cm2_g?: number;
+  kpi?: {
+    strength_mpa?: number;
+    lsf?: number;
+  };
+  kiln?: {
+    free_lime_pct?: number;
+  };
+  raw_mill?: {
+    blaine_cm2_g?: number;
+  };
+}
+
+interface SoftSensor {
+  id: string;
+  name: string;
+  unit: string;
+  color: string;
+  getValue: (data: SoftSensorData | PredictionResponse) => number;
+}
+
+interface TrendData {
+  time: number;
+  value: number;
+}
+
+interface SensorTrend {
+  current: number;
+  data: TrendData[];
+}
+
+interface SensorTrends {
+  [key: string]: SensorTrend;
+}
 
 // ML-based soft sensor definitions  
-const softSensors = [
+const softSensors: SoftSensor[] = [
   {
     id: 'cement_strength',
     name: 'Cement Strength',
     unit: 'MPa',
-    color: col1,
-    getValue: (predictions: PredictionResponse | null) => predictions?.strength_mpa || 0,
+    color: glowCol1,
+    getValue: (data: SoftSensorData | PredictionResponse) => data.strength_mpa || 0,
   },
   {
     id: 'lsf_prediction',
     name: 'LSF Prediction',
     unit: '',
-    color: col2,
-    getValue: (predictions: PredictionResponse | null) => predictions?.lsf_predicted || 0,
+    color: glowCol2,
+    getValue: (data: SoftSensorData | PredictionResponse) => data.lsf_predicted || 0,
   },
   {
     id: 'free_lime',
     name: 'Free Lime Content',
     unit: '%',
-    color: col3,
-    getValue: (predictions: PredictionResponse | null) => predictions?.free_lime_pct || 0,
+    color: glowCol3,
+    getValue: (data: SoftSensorData | PredictionResponse) => data.free_lime_pct || (data as SoftSensorData).free_lime || 0,
   },
   {
     id: 'blaine_fineness',
     name: 'Blaine Fineness',
     unit: 'cm²/g',
-    color: col4,
-    getValue: (predictions: PredictionResponse | null) => predictions?.blaine_cm2_g || 0,
+    color: glowCol4,
+    getValue: (data: SoftSensorData | PredictionResponse) => data.blaine_cm2_g || 0,
   }
 ];
 
 export default function SoftSensors() {
+  const router = useRouter();
   const [reading, setReading] = useState<PlantReading | null>(null);
   const [predictions, setPredictions] = useState<PredictionResponse | null>(null);
-  const [historicalData, setHistoricalData] = useState<any[]>([]);
-  const [sensorTrends, setSensorTrends] = useState<any>({});
+  const [historicalData, setHistoricalData] = useState<SoftSensorData[]>([]);
+  const [sensorTrends, setSensorTrends] = useState<SensorTrends>({});
   const [lastUpdated, setLastUpdated] = useState<string>('');
 
   useEffect(() => {
@@ -58,6 +102,11 @@ export default function SoftSensors() {
         // Fetch ML predictions based on current plant state
         const predData = await fetchMLPredictions();
         setPredictions(predData);
+        
+        // Historize soft sensor predictions
+        if (data && predData) {
+          historizeSoftSensorReading(data.timestamp, predData);
+        }
         
         // Update timestamp when data is successfully fetched
         setLastUpdated(new Date().toLocaleTimeString());
@@ -73,31 +122,25 @@ export default function SoftSensors() {
 
   useEffect(() => {
     const fetchHistoricalData = async () => {
-      const data = await getHistoricalData(144); // 24 hours of data (every 10 mins)
+      const data = await getSoftSensorHistoricalData(18); // 3 hour of soft sensor data
+      console.log('Fetched soft sensor historical data:', data);
       setHistoricalData(data);
-      
-      // Calculate trends for each sensor using predictions
-      const trends: any = {};
+      const trends: SensorTrends = {};
       softSensors.forEach(sensor => {
         if (predictions) {
           const currentValue = sensor.getValue(predictions);
-           const values = historicalData.map(d => sensor.getValue(d));
-           const avgValue = values.length ? values.reduce((a, b) => a + b, 0) / values.length : currentValue;
-           const change = avgValue !== 0 ? ((currentValue - avgValue) / avgValue) * 100 : 0;
-
-           trends[sensor.id] = {
-             current: currentValue,
-             change,
-             data: Array.from({ length: 24 }, (_, i) => ({
-               time: Date.now() - (23 - i) * 300000, 
-               value: currentValue + (Math.random() - 0.5) * currentValue * 0.1
-             }))
-           };
+          // Use soft sensor historical data for trend plot
+          trends[sensor.id] = {
+            current: currentValue,
+            data: data.map(d => ({
+              time: d.timestamp,
+              value: sensor.getValue(d)
+            }))
+          };
         }
       });
       setSensorTrends(trends);
     };
-    
     if (predictions) {
       fetchHistoricalData();
     }
@@ -110,35 +153,48 @@ export default function SoftSensors() {
     return () => { document.body.style.margin = ''; };
   }, []);
 
-  const renderSensorCard = (sensor: any) => {
+  const renderSensorCard = (sensor: SoftSensor) => {
     const trend = sensorTrends[sensor.id];
     if (!trend) return null;
-
-    const isPositive = trend.change >= 0;
+    let change = 0;
+    if (trend.data.length >= 2) {
+      const recentHistoricalValues = trend.data.slice(-3); // Last 3 historical points
+      const recentAverage = recentHistoricalValues.reduce((sum: number, point: TrendData) => sum + point.value, 0) / recentHistoricalValues.length;
+      change = recentAverage !== 0 ? ((trend.current - recentAverage) / recentAverage) * 100 : 0;
+    }
+    const isPositive = change >= 0;
     const changeColor = isPositive ? '#4caf50' : '#f44336';
-
+  const plotData = trend.data.length > 2 ? trend.data.slice(0, -2) : trend.data;
+  
+  const enhancedPlotData = plotData.map((point: TrendData, index: number) => ({
+    ...point,
+    value: point.value + (index % 2 === 0 ? 0.001 : -0.001) // Tiny variation for rendering
+  }));
     return (
       <Paper
         key={sensor.id}
+        onClick={() => router.push(`/softsensor/${sensor.id}`)}
         sx={{
           background: cardBg,
-          
           borderRadius: 3,
           p: 3,
           height: 180,
-          width: '15vw',
+          width: '13vw',
+          border: `1px solid ${sensor.color}20`,
           position: 'relative',
           overflow: 'hidden',
           transition: '0.3s',
+          cursor: 'pointer',
           '&:hover': {
             borderColor: sensor.color,
-            boxShadow: `0 4px 20px ${sensor.color}30`,
+            boxShadow: `0 4px 20px ${sensor.color}50`,
+            transform: 'translateY(-2px)',
           }
         }}
       >
         {/* Header */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-          <Typography sx={{ color: textColor, fontSize: 14, fontWeight: 500 }}>
+          <Typography sx={{ color: textColor3, fontSize: 14, fontWeight: 500, fontFamily: `'Montserrat', sans-serif` }}>
             {sensor.name}
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -148,7 +204,7 @@ export default function SoftSensors() {
               <TrendingDownIcon sx={{ color: changeColor, fontSize: 16 }} />
             )}
             <Typography sx={{ color: changeColor, fontSize: 12, fontWeight: 600 }}>
-              {isPositive ? '+' : ''}{Math.abs(trend.change).toFixed(2)}%
+              {isPositive ? '+' : ''}{Math.abs(change).toFixed(2)}%
             </Typography>
           </Box>
         </Box>
@@ -157,12 +213,12 @@ export default function SoftSensors() {
         <Typography sx={{ 
           color: textColor, 
           fontSize: 28, 
-          fontWeight: 700,
           mb: 2,
-          lineHeight: 1
+          lineHeight: 1,
+          fontFamily: `'Montserrat', sans-serif`, fontWeight: 200
         }}>
           {trend.current.toFixed(2)}
-          <Typography component="span" sx={{ fontSize: 14, color: '#b6d4e3', ml: 1 }}>
+          <Typography component="span" sx={{ fontSize: 14, color: '#b6d4e3', ml: 1, fontFamily: `'Montserrat', sans-serif`, fontWeight: 200 }}>
             {sensor.unit}
           </Typography>
         </Typography>
@@ -173,18 +229,38 @@ export default function SoftSensors() {
           bottom: 0, 
           left: 0, 
           right: 0, 
-          height: 80,
-          opacity: 0.8
+          height: 120,
+          opacity: 0.9
         }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={trend.data}>
+          <ResponsiveContainer width="80%" height="100%">
+            <LineChart data={enhancedPlotData}>
+              <defs>
+                <filter id={`neon-shadow-${sensor.id}`} x="-20%" y="-20%" width="200%" height="200%">
+                  <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor={sensor.color} floodOpacity="0.9" />
+                </filter>
+              </defs>
+              <YAxis
+                hide
+                domain={[(dataMin: number) => {
+                  const min = dataMin * 0.90;
+                  const max = dataMin * 1.10;
+                  return Math.abs(max - min) < 0.01 ? min - 0.1 : min;
+                }, (dataMax: number) => {
+                  const min = dataMax * 0.90;
+                  const max = dataMax * 1.10;
+                  return Math.abs(max - min) < 0.01 ? max + 0.1 : max;
+                }]}
+              />
               <Line 
                 type="monotone" 
                 dataKey="value" 
-                stroke={sensor.color}
-                strokeWidth={2}
+                stroke={sensor.color} 
+                strokeWidth={3}
                 dot={false}
                 activeDot={false}
+                filter={`url(#neon-shadow-${sensor.id})`}
+                strokeOpacity={0.9}
+                connectNulls={true}
               />
             </LineChart>
           </ResponsiveContainer>
@@ -214,12 +290,13 @@ export default function SoftSensors() {
         overflow: 'hidden',
         boxShadow: shadowDrop,
       }}>
+
         <Sidebar />
 
         {/* Main Content */}
         <Box sx={{
           flex: 1,
-          p: 5,
+          p: 4,
           display: 'flex',
           flexDirection: 'column',
           gap: 4,
@@ -227,45 +304,15 @@ export default function SoftSensors() {
         }}>
           {/* Header */}
           <Box sx={{ mb: 1 }}>
-            <Typography variant="h4" sx={{fontFamily: `'Montserrat', sans-serif`, color: textColor, fontWeight: 400, mb: 1 }}>
-              Soft Sensors
-            </Typography>
+            <PageHeader pageName="Soft Sensors" />
           </Box>
 
-          {/* Prediction Status Panel */}
-          <Paper sx={{
-            background: cardBg,
-            border: '1px solid rgba(255, 255, 255, 0.2)',
-            borderRadius: 4,
-            p: 1,
-            mb: 1
-          }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Typography sx={{ color: accent, fontWeight: 700, fontSize: 18 }}>
-                ML Model Status
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Box sx={{
-                  width: 12,
-                  height: 12,
-                  borderRadius: '50%',
-                  background: predictions?.prediction_confidence === 'high' ? '#4caf50' : 
-                             predictions?.prediction_confidence === 'low' ? '#ff9800' : '#f44336'
-                }} />
-                <Typography sx={{ color: textColor, fontSize: 14 }}>
-                  Confidence: {predictions?.prediction_confidence || 'Loading...'}
-                </Typography>
-                <Typography sx={{ color: '#b6d4e3', fontSize: 12, ml: 2 }}>
-                  Last updated: {lastUpdated || 'Loading...'}
-                </Typography>
-              </Box>
-            </Box>
-          </Paper>
+          
 
           {/* Sensor Grid */}
           <Box sx={{
             display: 'grid',
-            gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: '1fr 1fr 1fr' },
+            gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: '1fr 1fr 1fr 1fr' },
             gap: 3,
             mb: 4
           }}>
