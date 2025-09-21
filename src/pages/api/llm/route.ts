@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ChromaClient } from "chromadb";
+import { NextApiRequest, NextApiResponse } from "next";
 
 // Initialize Gemini and ChromaDB
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
@@ -23,7 +24,7 @@ async function setupCollection() {
 }
 setupCollection();
 
-export default async function handler(req, res) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;

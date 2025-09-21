@@ -490,7 +490,7 @@ ${data.insights}
         sx={{
           p: 3,
           maxWidth: '75%',
-          background: message.type === 'user' ? glowBg2 : 
+          background: message.type === 'user' ? cardBg : 
                      message.type === 'system' ? `${glowBg3}60` : cardBg,
           border: message.type === 'user' ? `1px solid ${glowCol2}` :
                   message.type === 'system' ? `1px solid ${glowCol3}` : `1px solid ${accent}40`,
@@ -645,8 +645,7 @@ ${data.insights}
           p: 4,
           display: 'flex',
           flexDirection: 'column',
-          gap: 1,
-          mt: 8
+          gap: 1
         }}>
           {/* Header */}
           <PageHeader pageName="AI Model Builder" />

@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { ChromaClient } from "chromadb";
-import { NextResponse } from "next/server";
+import { NextApiRequest, NextApiResponse } from "next";
 
 // Initialize Gemini and ChromaDB
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
@@ -27,12 +27,16 @@ async function setupCollection() {
 }
 setupCollection(); // Run setup on server start
 
-export async function POST(req: Request) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
   try {
-    const { query } = await req.json();
+    const { query } = req.body;
 
     if (!query) {
-      return NextResponse.json({ error: "Query is required" }, { status: 400 });
+      return res.status(400).json({ error: "Query is required" });
     }
 
     // 1. Get the document collection from ChromaDB
@@ -64,9 +68,9 @@ export async function POST(req: Request) {
     const response = await result.response;
     const text = response.text();
 
-    return NextResponse.json({ answer: text });
+    return res.status(200).json({ answer: text });
   } catch (error) {
     console.error(error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return res.status(500).json({ error: "Internal server error" });
   }
 }
