@@ -362,7 +362,7 @@ export default function SoftSensorDetail() {
                   }}>
                     <Box>
                       <Typography sx={{ 
-                        color: textColor2, 
+                        color: textColor3, 
                         fontSize: 12, 
                         fontWeight: 500,
                         fontFamily: `'Montserrat', sans-serif`
