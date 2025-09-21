@@ -95,6 +95,21 @@ export default function Sidebar() {
                   <FactoryIcon /> <Typography fontSize={'0.9em'} sx={{fontFamily: `'Montserrat', sans-serif`}}>Optimizer</Typography>
                 </Button>
             </ListItem>
+            
+            <ListItem>
+                <Button 
+                  onClick={() => handleNavigation('/modelbuilder')}
+                  sx={{ color: router.pathname === '/modelbuilder' ? accent : textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none',
+                    '&:hover': {
+                      backgroundColor: router.pathname === '/modelbuilder' ? accent : 'rgba(0, 230, 254, 0.1)',
+                      color: router.pathname === '/modelbuilder' ? textColor2 : accent,
+                    }
+                  }}
+                >
+                  <BuildIcon /> <Typography fontSize={'0.9em'} sx={{fontFamily: `'Montserrat', sans-serif`}}>Model Builder</Typography>
+                </Button>
+            </ListItem>
+
             <ListItem>
                 <Button 
                   onClick={() => handleNavigation('/simulation')}
@@ -119,19 +134,6 @@ export default function Sidebar() {
                   }}
                 >
                   <SmartToyIcon /> <Typography fontSize={'0.9em'} sx={{fontFamily: `'Montserrat', sans-serif`}}>Co-Pilot</Typography>
-                </Button>
-            </ListItem>
-            <ListItem>
-                <Button 
-                  onClick={() => handleNavigation('/modelbuilder')}
-                  sx={{ color: router.pathname === '/modelbuilder' ? accent : textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none',
-                    '&:hover': {
-                      backgroundColor: router.pathname === '/modelbuilder' ? accent : 'rgba(0, 230, 254, 0.1)',
-                      color: router.pathname === '/modelbuilder' ? textColor2 : accent,
-                    }
-                  }}
-                >
-                  <BuildIcon /> <Typography fontSize={'0.9em'} sx={{fontFamily: `'Montserrat', sans-serif`}}>Model Builder</Typography>
                 </Button>
             </ListItem>
       </List>
