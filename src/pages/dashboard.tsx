@@ -279,9 +279,9 @@ interface ChartDataPoint {
 // Helper function to safely get nested property values
 function getNestedValue(obj: PlantReading | Record<string, unknown>, path: string): number {
   try {
-    const result = path.split('.').reduce((current: any, key: string) => {
-      return current && typeof current === 'object' ? current[key] : undefined;
-    }, obj);
+    const result = path.split('.').reduce((current: unknown, key: string) => {
+      return current && typeof current === 'object' ? (current as Record<string, unknown>)[key] : undefined;
+    }, obj as unknown);
     return typeof result === 'number' ? result : 0;
   } catch {
     return 0;
