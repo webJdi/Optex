@@ -92,7 +92,26 @@ export default function ModelBuilder() {
   };
   
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Use setTimeout to ensure DOM has updated
+    setTimeout(() => {
+      if (messagesEndRef.current) {
+        const container = messagesEndRef.current.closest('[data-scrollable]');
+        if (container) {
+          // Scroll within the chat container only
+          messagesEndRef.current.scrollIntoView({ 
+            behavior: "smooth", 
+            block: "end",
+            inline: "nearest"
+          });
+        } else {
+          // Fallback: scroll within the messages container
+          messagesEndRef.current.scrollIntoView({ 
+            behavior: "smooth",
+            block: "nearest"
+          });
+        }
+      }
+    }, 100);
   };
 
   useEffect(() => {
@@ -100,10 +119,10 @@ export default function ModelBuilder() {
   }, [messages]);
 
   // Body margin effect
-  useEffect(() => {
-    document.body.style.margin = '0';
-    return () => { document.body.style.margin = ''; };
-  }, []);
+    useEffect(() => {
+      document.body.style.margin = '0';
+      return () => { document.body.style.margin = ''; };
+    }, []);
 
   // Show loading spinner while checking authentication
   if (authLoading) {
@@ -301,6 +320,65 @@ export default function ModelBuilder() {
   const detectOperation = (input: string) => {
     const lowerInput = input.toLowerCase();
     
+    // Correlation analysis
+    if (lowerInput.includes('correlation') || lowerInput.includes('correlation matrix') || 
+        lowerInput.includes('correlation analysis') || lowerInput.includes('show correlations')) {
+      if (!currentDataset) {
+        return { type: 'correlation', parameters: {}, needsDataset: true };
+      }
+      return { type: 'correlation', parameters: {} };
+    }
+    
+    // Statistical analysis
+    if (lowerInput.includes('statistics') || lowerInput.includes('stats') || 
+        lowerInput.includes('describe') || lowerInput.includes('summary')) {
+      if (!currentDataset) {
+        return { type: 'statistics', parameters: {}, needsDataset: true };
+      }
+      return { type: 'statistics', parameters: {} };
+    }
+    
+    // Distribution analysis
+    if (lowerInput.includes('distribution') || lowerInput.includes('histogram') || 
+        lowerInput.includes('plot') || lowerInput.includes('visualize')) {
+      if (!currentDataset) {
+        return { type: 'visualization', parameters: {}, needsDataset: true };
+      }
+      
+      let plotType = 'histogram';
+      if (lowerInput.includes('scatter')) plotType = 'scatter';
+      if (lowerInput.includes('box')) plotType = 'boxplot';
+      if (lowerInput.includes('heatmap')) plotType = 'heatmap';
+      
+      return { type: 'visualization', parameters: { plotType } };
+    }
+    
+    // Missing values analysis
+    if (lowerInput.includes('missing') && (lowerInput.includes('analyze') || lowerInput.includes('show') || lowerInput.includes('check'))) {
+      if (!currentDataset) {
+        return { type: 'missing_analysis', parameters: {}, needsDataset: true };
+      }
+      return { type: 'missing_analysis', parameters: {} };
+    }
+    
+    // Feature importance/selection
+    if (lowerInput.includes('feature') && (lowerInput.includes('importance') || lowerInput.includes('selection') || lowerInput.includes('relevant'))) {
+      if (!currentDataset) {
+        return { type: 'feature_analysis', parameters: {}, needsDataset: true };
+      }
+      return { type: 'feature_analysis', parameters: {} };
+    }
+    
+    // Data quality assessment
+    if (lowerInput.includes('quality') || lowerInput.includes('assess') || 
+        lowerInput.includes('data health') || lowerInput.includes('data issues')) {
+      if (!currentDataset) {
+        return { type: 'quality_check', parameters: {}, needsDataset: true };
+      }
+      return { type: 'quality_check', parameters: {} };
+    }
+    
+    // Basic analyze operation
     if (lowerInput.includes('analyze') || lowerInput.includes('analyse') || 
         lowerInput.includes('analyze my data') || lowerInput.includes('show me the data')) {
       if (!currentDataset) {
@@ -309,6 +387,7 @@ export default function ModelBuilder() {
       return { type: 'analyze', parameters: {} };
     }
     
+    // Data cleaning operations
     if (lowerInput.includes('clean') || lowerInput.includes('remove missing') || 
         lowerInput.includes('handle missing values')) {
       if (!currentDataset) {
@@ -327,6 +406,7 @@ export default function ModelBuilder() {
       return { type: 'clean', parameters: { method, strategy } };
     }
     
+    // Model training
     if (lowerInput.includes('train') || lowerInput.includes('build a model') || 
         lowerInput.includes('create a model')) {
       if (!currentDataset) {
@@ -755,27 +835,30 @@ ${data.insights}
           </Box>
 
           {/* Chat Area */}
-          <Box sx={{
-            flex: 1,
-            px: 4,
-            pb: 2,
-            overflow: 'auto',
-            background: `${cardBg}99`,
-            border: `1px solid ${accent}25`,
-            borderRadius: 3,
-            mx: 4,
-            mb: 2,
-            '&::-webkit-scrollbar': {
-              width: '6px',
-            },
-            '&::-webkit-scrollbar-track': {
-              background: 'transparent',
-            },
-            '&::-webkit-scrollbar-thumb': {
-              background: `${accent}40`,
-              borderRadius: '3px',
-            },
-          }}>
+          <Box 
+            data-scrollable
+            sx={{
+              flex: 1,
+              px: 4,
+              pb: 2,
+              overflow: 'auto',
+              background: `${cardBg}99`,
+              border: `1px solid ${accent}25`,
+              borderRadius: 3,
+              mx: 4,
+              mb: 2,
+              '&::-webkit-scrollbar': {
+                width: '6px',
+              },
+              '&::-webkit-scrollbar-track': {
+                background: 'transparent',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                background: `${accent}40`,
+                borderRadius: '3px',
+              },
+            }}
+          >
             <Box sx={{ p: 3, pt: 4 }}>
               {messages.map(renderMessage)}
               {isLoading && (
@@ -830,10 +913,13 @@ ${data.insights}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask me to analyze data, clean datasets, train models, or anything ML-related..."
-              onKeyPress={(e) => {
+              onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
-                  handleSendMessage();
+                  e.stopPropagation();
+                  if (input.trim() && !isLoading) {
+                    handleSendMessage();
+                  }
                 }
               }}
               sx={{
