@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { NextApiRequest, NextApiResponse } from "next";
 import { retrieveContext } from '../../services/rag';
 import { fetchPlantReading } from '../../services/plantApi';
 
@@ -8,7 +9,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 
 
-export default async function handler(req, res) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Method not allowed" });
     return;
