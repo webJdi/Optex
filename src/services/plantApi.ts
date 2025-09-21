@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Service to fetch cement plant readings from FastAPI backend
 
 export interface KpiModel {

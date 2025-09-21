@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from './firebase2';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -24,7 +25,7 @@ export async function retrieveContext(query: string, topN = 3): Promise<string[]
   const queryVector = await embedQuery(query);
   const snapshot = await getDocs(collection(db, 'cement_doc_chunks'));
   const chunks: { chunk: string; vector: number[] }[] = [];
-  snapshot.forEach(doc => {
+  snapshot.forEach((doc: any) => {
     const data = doc.data();
     if (data.chunk && Array.isArray(data.vector)) {
       chunks.push({ chunk: data.chunk, vector: data.vector });

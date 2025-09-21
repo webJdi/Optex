@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { fetchPlantReading } from './plantApi';
 
 // Feature mappings for each soft sensor based on the Python ML models

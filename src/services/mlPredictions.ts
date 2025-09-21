@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Service to fetch ML predictions from FastAPI backend
 
 export interface PredictionInput {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // Mock data provider for dashboard components
 // Replace with live API integration later
 
