@@ -1043,9 +1043,9 @@ ${Object.entries(featureData.feature_importance)
 | Feature | Importance | Univariate | Mutual Info |
 |---------|------------|------------|-------------|
 ${Object.keys(featureData.feature_importance).map(feature => {
-  const imp = featureData.feature_importance[feature];
-  const uni = featureData.feature_selection.univariate_scores[feature];
-  const mut = featureData.feature_selection.mutual_information[feature];
+  const imp = (featureData.feature_importance as Record<string, number>)[feature];
+  const uni = (featureData.feature_selection.univariate_scores as Record<string, number>)[feature];
+  const mut = (featureData.feature_selection.mutual_information as Record<string, number>)[feature];
   return `| ${feature.replace('_', ' ')} | ${(imp * 100).toFixed(1)}% | ${uni.toFixed(1)} | ${mut.toFixed(2)} |`;
 }).join('\n')}
 
