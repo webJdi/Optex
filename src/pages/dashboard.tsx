@@ -18,6 +18,42 @@ import SolarPowerIcon from '@mui/icons-material/SolarPower';
 import LocalShippingIcon from '@mui/icons-material/LocalShipping';
 import MicIcon from '@mui/icons-material/Mic';
 import CloseIcon from '@mui/icons-material/Close';
+
+// Types for Speech Recognition API
+interface SpeechRecognitionEvent {
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResultList {
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+interface SpeechRecognitionConstructor {
+  new (): SpeechRecognition;
+}
+
+interface SpeechRecognition {
+  lang: string;
+  onresult: (event: SpeechRecognitionEvent) => void;
+  onend?: () => void;
+  start: () => void;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
+}
 import PsychologyIcon from '@mui/icons-material/Psychology';
 import SendIcon from '@mui/icons-material/Send';
 import VoiceOverOffIcon from '@mui/icons-material/VoiceOverOff';
@@ -36,11 +72,11 @@ function VoiceChatButton() {
 
   // Voice input Segment
   const startVoice = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) return;
     const recognition = new SpeechRecognition();
     recognition.lang = 'en-US';
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
       setInput(event.results[0][0].transcript);
       setVoiceSent(true);
     };
@@ -234,26 +270,53 @@ function VoiceChatButton() {
   );
 }
 
+// Interface for chart data points
+interface ChartDataPoint {
+  time: string;
+  [key: string]: string | number; // Allow dynamic value properties like value0, value1, etc.
+}
+
+// Helper function to safely get nested property values
+function getNestedValue(obj: any, path: string): number {
+  return path.split('.').reduce((current, key) => current && current[key], obj) || 0;
+}
+
 export default function Dashboard() {
   const [reading, setReading] = useState<PlantReading | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [historicalData, setHistoricalData] = useState<any[]>([]);
+  const [historicalData, setHistoricalData] = useState<PlantReading[]>([]);
   const [selectedKpis, setSelectedKpis] = useState<string[]>(['kpi.shc_kcal_kg']);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    const interval: NodeJS.Timeout = setInterval(() => {
+      const pollReading = async () => {
+        try {
+          const data = await fetchPlantReading();
+          setReading(data);
+          await historizePlantReading(data);
+          setError(null);
+        } catch (e) {
+          const errorMessage = e instanceof Error ? e.message : 'Error fetching reading';
+          setError(errorMessage);
+        }
+      };
+      pollReading();
+    }, 60000); // poll every 1 min
+    
+    // Initial fetch
     const pollReading = async () => {
       try {
         const data = await fetchPlantReading();
         setReading(data);
         await historizePlantReading(data);
         setError(null);
-      } catch (e: any) {
-        setError(e.message || 'Error fetching reading');
+      } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : 'Error fetching reading';
+        setError(errorMessage);
       }
     };
     pollReading();
-    interval = setInterval(pollReading, 60000); // poll every 1 min
+    
     return () => clearInterval(interval);
   }, []);
 
@@ -269,16 +332,16 @@ export default function Dashboard() {
     return () => clearInterval(chartInterval);
   }, []);
 
-  const getChartData = () => {
+  const getChartData = (): ChartDataPoint[] => {
     return historicalData.map((item, itemIndex) => {
-      const dataPoint: any = {
+      const dataPoint: ChartDataPoint = {
         time: new Date(item.timestamp).toLocaleTimeString(),
       };
       
       selectedKpis.forEach((kpi, index) => {
         const value = kpi.includes('.') ? 
-          kpi.split('.').reduce((o: any, i: string) => o && o[i], item) : 
-          item[kpi];
+          getNestedValue(item, kpi) : 
+          getNestedValue(item, kpi);
         // Add tiny variations for steady values to ensure line visibility
         const variation = (itemIndex % 2 === 0 ? 0.001 : -0.001);
         dataPoint[`value${index}`] = value + variation;
