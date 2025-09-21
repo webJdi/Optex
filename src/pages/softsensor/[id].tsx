@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import { useRequireAuth } from '../../hooks/useAuth';
 import { fetchPlantReading, PlantReading } from '../../services/plantApi';
 import { fetchMLPredictions, PredictionResponse } from '../../services/mlPredictions';
 import { getSoftSensorHistoricalData, historizeSoftSensorReading } from '../../services/plantHistory';
@@ -63,6 +64,7 @@ const softSensors = [
   
 
 export default function SoftSensorDetail() {
+  const { user, loading: authLoading } = useRequireAuth();
   const router = useRouter();
   const { id } = router.query;
   
@@ -73,27 +75,35 @@ export default function SoftSensorDetail() {
   const [sensorData, setSensorData] = useState<any>(null);
   const [featureValues, setFeatureValues] = useState<SensorFeatureValue[]>([]);
 
-  // Find the current sensor based on ID
+  // Find the current sensor based on ID - only run when authenticated
   useEffect(() => {
-    if (id) {
-      const sensor = softSensors.find(s => s.id === id);
-      setCurrentSensor(sensor);
-    }
-  }, [id]);
+    if (!user || !id) return;
+    
+    console.log('Finding sensor with ID:', id);
+    const sensor = softSensors.find(s => s.id === id);
+    console.log('Found sensor:', sensor);
+    setCurrentSensor(sensor);
+  }, [user, id]);
 
+  // Body margin effect
   useEffect(() => {
     document.body.style.margin = '0';
     return () => { document.body.style.margin = ''; };
   }, []);
 
+  // Main data fetching effect - only run when authenticated and sensor is selected
   useEffect(() => {
+    if (!user || !currentSensor) return;
+    
     const fetchCurrentData = async () => {
       try {
+        console.log('Fetching current data for sensor:', currentSensor?.id);
         const data = await fetchPlantReading();
         setReading(data);
         
         // Fetch ML predictions based on current plant state
         const predData = await fetchMLPredictions();
+        console.log('Predictions received:', predData);
         setPredictions(predData);
         
         // Historize soft sensor predictions
@@ -114,44 +124,93 @@ export default function SoftSensorDetail() {
     fetchCurrentData();
     const interval = setInterval(fetchCurrentData, 10000);
     return () => clearInterval(interval);
-  }, [currentSensor]);
+  }, [user, currentSensor]);
 
+  // Historical data fetching effect - only run when authenticated
   useEffect(() => {
+    if (!user || !currentSensor || !predictions) return;
+    
     const fetchHistoricalData = async () => {
+      console.log('Fetching historical data for sensor:', currentSensor?.id);
       const data = await getSoftSensorHistoricalData(72); // 12 hours of data for detailed view
+      console.log('Historical data received:', data);
       setHistoricalData(data);
       
       if (currentSensor && predictions) {
         const currentValue = currentSensor.getValue(predictions);
+        console.log('Current value:', currentValue);
+        
         const chartData = data.map(d => ({
           time: new Date(d.timestamp).toLocaleTimeString(),
           value: currentSensor.getValue(d),
           timestamp: d.timestamp
         }));
+        console.log('Chart data mapped:', chartData);
         
-        // Calculate trend
+        // Calculate trend change
         let change = 0;
         if (data.length >= 2) {
-          const recentHistoricalValues = data.slice(-3);
+          const recentHistoricalValues = data.slice(-3); // Get last 3 data points
           const recentAverage = recentHistoricalValues.reduce((sum: number, point: any) => sum + currentSensor.getValue(point), 0) / recentHistoricalValues.length;
           change = recentAverage !== 0 ? ((currentValue - recentAverage) / recentAverage) * 100 : 0;
         }
-
-        setSensorData({
-          current: currentValue,
-          change,
-          chartData,
+        console.log('Calculated change:', change);
+        
+        const sensorDataObject = { 
+          current: currentValue, 
+          data: chartData,
+          chartData: chartData, // Add chartData property for chart rendering
+          change: change,
           isInRange: currentValue >= currentSensor.targetRange.min && currentValue <= currentSensor.targetRange.max
-        });
+        };
+        console.log('Setting sensor data:', sensorDataObject);
+        setSensorData(sensorDataObject);
       }
     };
     
-    if (currentSensor && predictions) {
-      fetchHistoricalData();
-    }
-    const interval = setInterval(fetchHistoricalData, 120000);
+    fetchHistoricalData();
+    const interval = setInterval(fetchHistoricalData, 120000); // Update every 2 mins
     return () => clearInterval(interval);
-  }, [currentSensor, predictions]);
+  }, [user, currentSensor, predictions]);
+
+  // Show loading spinner while checking authentication
+  if (authLoading) {
+    return (
+      <Box sx={{
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #1e1a2e 0%, #16213e 100%)',
+      }}>
+        {/* CSS Spinner */}
+        <Box sx={{
+          width: 50,
+          height: 50,
+          border: '4px solid rgba(106, 130, 251, 0.2)',
+          borderTop: '4px solid #6a82fb',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+          mb: 2
+        }} />
+        <Typography sx={{ color: '#fff', fontSize: 16, opacity: 0.8 }}>Loading...</Typography>
+        
+        {/* CSS Animation */}
+        <style jsx>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </Box>
+    );
+  }
+
+  // If not authenticated, useRequireAuth will redirect to login
+  if (!user) {
+    return null;
+  }
 
   if (!currentSensor) {
     return <div>Loading...</div>;
@@ -191,7 +250,17 @@ export default function SoftSensorDetail() {
           display: 'flex',
           flexDirection: 'column',
           gap: 4,
-          overflow: 'auto'
+          overflow: 'auto',
+          '&::-webkit-scrollbar': {
+                        width: '6px',
+                      },
+                      '&::-webkit-scrollbar-track': {
+                        background: 'transparent',
+                      },
+                      '&::-webkit-scrollbar-thumb': {
+                        background: `${accent}40`,
+                        borderRadius: '3px',
+                      },
         }}>
           {/* Header with Back Button */}
           <Box sx={{ display: 'flex', alignItems: 'space-between', gap: 2, mb: 2 }}>

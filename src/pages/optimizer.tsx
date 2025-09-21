@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from 'react';
+import { useRequireAuth } from '../hooks/useAuth';
 import { FormControl, Select, MenuItem, SelectChangeEvent } from '@mui/material';
 import Sidebar from '../components/Sidebar';
 import { Box, Typography, Paper, Button, CircularProgress } from '@mui/material';
@@ -25,13 +26,17 @@ interface OptimizerResult {
 type SectionType = 'Raw Materials & Grinding' | 'Clinkerization';
 
 export default function Optimizer() {
+  const { user, loading: authLoading } = useRequireAuth();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<OptimizerResult | null>(null);
   const [section, setSection] = useState<SectionType>('Clinkerization');
   const [timer, setTimer] = useState<number>(300); // 5 min in seconds
   const [running, setRunning] = useState(false);
-  
+
+  // Timer effect - only run when authenticated
   useEffect(() => {
+    if (!user) return;
+    
     let interval: NodeJS.Timeout | null = null;
     if (running && timer > 0) {
       interval = setInterval(() => setTimer(t => t - 1), 1000);
@@ -40,7 +45,51 @@ export default function Optimizer() {
       setRunning(false);
     }
     return () => { if (interval) clearInterval(interval); };
-  }, [running, timer]);
+  }, [user, running, timer]);
+
+  // Body margin effect
+  useEffect(() => {
+    document.body.style.margin = '0';
+    return () => { document.body.style.margin = ''; };
+  }, []);
+
+  // Show loading spinner while checking authentication
+  if (authLoading) {
+      return (
+        <Box sx={{
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(135deg, #1e1a2e 0%, #16213e 100%)',
+        }}>
+          {/* CSS Spinner */}
+          <Box sx={{
+            width: 50,
+            height: 50,
+            border: '4px solid rgba(106, 130, 251, 0.2)',
+            borderTop: '4px solid #6a82fb',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            mb: 2
+          }} />
+          
+          {/* CSS Animation */}
+          <style jsx>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
+        </Box>
+      );
+    }
+
+  // If not authenticated, useRequireAuth will redirect to login
+  if (!user) {
+    return null;
+  }
 
   // Variable lists for each section
   const variables = {
@@ -73,11 +122,6 @@ export default function Optimizer() {
       ]
     }
   };
-
-  useEffect(() => {
-    document.body.style.margin = '0';
-    return () => { document.body.style.margin = ''; };
-  }, []);
 
   const handleStart = async () => {
     setLoading(true);

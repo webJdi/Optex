@@ -3,6 +3,7 @@
 /* eslint-disable prefer-const */
 import React, { useState, useEffect } from 'react';
 import { storeConversation, auth } from '../services/firebase';
+import { useRequireAuth } from '../hooks/useAuth';
 import { fetchPlantReading, PlantReading } from '../services/plantApi';
 import { historizePlantReading, getHistoricalData } from '../services/plantHistory';
 import { Box, Typography, Paper, Button, FormControl, InputLabel, Select, MenuItem, IconButton } from '@mui/material';
@@ -292,12 +293,15 @@ function getNestedValue(obj: PlantReading | Record<string, unknown>, path: strin
 }
 
 export default function Dashboard() {
+  const { user, loading } = useRequireAuth();
   const [reading, setReading] = useState<PlantReading | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [historicalData, setHistoricalData] = useState<PlantReading[]>([]);
   const [selectedKpis, setSelectedKpis] = useState<string[]>(['kpi.shc_kcal_kg']);
 
   useEffect(() => {
+    if (!user || loading) return; // Skip if not authenticated or still loading
+    
     const interval: NodeJS.Timeout = setInterval(() => {
       const pollReading = async () => {
         try {
@@ -328,9 +332,11 @@ export default function Dashboard() {
     pollReading();
     
     return () => clearInterval(interval);
-  }, []);
+  }, [user, loading]);
 
   useEffect(() => {
+    if (!user || loading) return; // Skip if not authenticated or still loading
+    
     const fetchHistoricalData = async () => {
       const data = await getHistoricalData(50);
       setHistoricalData(data);
@@ -340,7 +346,50 @@ export default function Dashboard() {
     // Refresh chart data every 2 minutes
     const chartInterval = setInterval(fetchHistoricalData, 120000); // 2 minutes
     return () => clearInterval(chartInterval);
+  }, [user, loading]);
+
+  useEffect(() => {
+    document.body.style.margin = '0';
+    return () => { document.body.style.margin = ''; };
   }, []);
+
+  // Show loading spinner while checking authentication
+  if (loading) {
+    return (
+      <Box sx={{
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'linear-gradient(135deg, #1e1a2e 0%, #16213e 100%)',
+      }}>
+        {/* CSS Spinner */}
+        <Box sx={{
+          width: 50,
+          height: 50,
+          border: '4px solid rgba(106, 130, 251, 0.2)',
+          borderTop: '4px solid #6a82fb',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+          mb: 2
+        }} />
+        
+        {/* CSS Animation */}
+        <style jsx>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </Box>
+    );
+  }
+
+  // If not authenticated, useRequireAuth will redirect to login
+  if (!user) {
+    return null;
+  }
 
   const getChartData = (): ChartDataPoint[] => {
     return historicalData.map((item, itemIndex) => {
@@ -405,12 +454,6 @@ export default function Dashboard() {
     { value: 'production.clinker_rate_tph', label: 'Clinker Production Rate (t/h)' },
     { value: 'production.clinker_temp_c', label: 'Clinker Temperature (°C)' }
   ];
-
-
-  useEffect(() => {
-    document.body.style.margin = '0';
-    return () => { document.body.style.margin = ''; };
-  }, []);
 
   return (
     <Box sx={{

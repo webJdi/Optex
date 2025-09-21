@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useState, useEffect, useRef } from 'react';
+import { useRequireAuth } from '../hooks/useAuth';
 import ReactMarkdown from 'react-markdown';
 import { 
   Box, 
@@ -65,6 +66,7 @@ interface ModelInfo {
 }
 
 export default function ModelBuilder() {
+  const { user, loading: authLoading } = useRequireAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
@@ -97,11 +99,49 @@ export default function ModelBuilder() {
     scrollToBottom();
   }, [messages]);
 
+  // Body margin effect
+  useEffect(() => {
+    document.body.style.margin = '0';
+    return () => { document.body.style.margin = ''; };
+  }, []);
 
-    useEffect(() => {
-      document.body.style.margin = '0';
-      return () => { document.body.style.margin = ''; };
-    }, []);
+  // Show loading spinner while checking authentication
+  if (authLoading) {
+      return (
+        <Box sx={{
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(135deg, #1e1a2e 0%, #16213e 100%)',
+        }}>
+          {/* CSS Spinner */}
+          <Box sx={{
+            width: 50,
+            height: 50,
+            border: '4px solid rgba(106, 130, 251, 0.2)',
+            borderTop: '4px solid #6a82fb',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            mb: 2
+          }} />
+          
+          {/* CSS Animation */}
+          <style jsx>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
+        </Box>
+      );
+    }
+
+  // If not authenticated, useRequireAuth will redirect to login
+  if (!user) {
+    return null;
+  }
 
     
   const handleSendMessage = async () => {

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
+import { useRequireAuth } from '../hooks/useAuth';
 import { fetchPlantReading, PlantReading } from '../services/plantApi';
 import { fetchMLPredictions, PredictionResponse } from '../services/mlPredictions';
 import { getSoftSensorHistoricalData, historizeSoftSensorReading } from '../services/plantHistory';
@@ -87,6 +88,7 @@ const softSensors: SoftSensor[] = [
 ];
 
 export default function SoftSensors() {
+  const { user, loading } = useRequireAuth();
   const router = useRouter();
   const [reading, setReading] = useState<PlantReading | null>(null);
   const [predictions, setPredictions] = useState<PredictionResponse | null>(null);
@@ -94,7 +96,10 @@ export default function SoftSensors() {
   const [sensorTrends, setSensorTrends] = useState<SensorTrends>({});
   const [lastUpdated, setLastUpdated] = useState<string>('');
 
+  // Main data fetching effect - only run when authenticated
   useEffect(() => {
+    if (!user) return;
+    
     const fetchCurrentData = async () => {
       try {
         const data = await fetchPlantReading();
@@ -119,9 +124,12 @@ export default function SoftSensors() {
     fetchCurrentData();
     const interval = setInterval(fetchCurrentData, 10000); // Update every 30s
     return () => clearInterval(interval);
-  }, []);
+  }, [user]);
 
+  // Historical data fetching effect - only run when authenticated and predictions are available
   useEffect(() => {
+    if (!user || !predictions) return;
+    
     const fetchHistoricalData = async () => {
       const data = await getSoftSensorHistoricalData(18); // 3 hour of soft sensor data
       console.log('Fetched soft sensor historical data:', data);
@@ -142,17 +150,55 @@ export default function SoftSensors() {
       });
       setSensorTrends(trends);
     };
-    if (predictions) {
-      fetchHistoricalData();
-    }
+    
+    fetchHistoricalData();
     const interval = setInterval(fetchHistoricalData, 120000); // Update every 2 mins
     return () => clearInterval(interval);
-  }, [predictions]);
+  }, [user, predictions]);
 
+  // Body margin effect
   useEffect(() => {
     document.body.style.margin = '0';
     return () => { document.body.style.margin = ''; };
   }, []);
+
+  // Show loading spinner while checking authentication
+  if (loading) {
+      return (
+        <Box sx={{
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(135deg, #1e1a2e 0%, #16213e 100%)',
+        }}>
+          {/* CSS Spinner */}
+          <Box sx={{
+            width: 50,
+            height: 50,
+            border: '4px solid rgba(106, 130, 251, 0.2)',
+            borderTop: '4px solid #6a82fb',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            mb: 2
+          }} />
+          
+          {/* CSS Animation */}
+          <style jsx>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
+        </Box>
+      );
+    }
+
+  // If not authenticated, useRequireAuth will redirect to login
+  if (!user) {
+    return null;
+  }
 
   const renderSensorCard = (sensor: SoftSensor) => {
     const trend = sensorTrends[sensor.id];

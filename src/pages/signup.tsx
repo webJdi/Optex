@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, TextField, Button, Paper } from '@mui/material';
 import { useRouter } from 'next/router';
-import { login } from '../services/firebase';
+import { signup } from '../services/firebase';
 import PageHeader from '../components/PageHeader';
 import { relative } from 'path';
 
@@ -11,9 +11,10 @@ const cardBg = 'rgba(24, 28, 56, 0.95)';
 const accent = '#6a82fb';
 const textColor = '#fff';
 
-export default function LoginPage() {
+export default function SignupPage() {
 	const [email, setEmail] = useState('');
 	const [password, setPassword] = useState('');
+	const [confirmPassword, setConfirmPassword] = useState('');
 	const [error, setError] = useState('');
 	const [loading, setLoading] = useState(false);
 	const router = useRouter();
@@ -23,14 +24,24 @@ export default function LoginPage() {
 		return () => { document.body.style.margin = ''; };
 	}, []);
 
-	const handleLogin = async () => {
+	const handleSignup = async () => {
+		if (password !== confirmPassword) {
+			setError('Passwords do not match');
+			return;
+		}
+
+		if (password.length < 6) {
+			setError('Password must be at least 6 characters');
+			return;
+		}
+
 		setLoading(true);
 		setError('');
 		try {
-			await login(email, password);
+			await signup(email, password);
 			router.push('/dashboard');
 		} catch (err) {
-			const errorMessage = err instanceof Error ? err.message : 'Login failed';
+			const errorMessage = err instanceof Error ? err.message : 'Signup failed';
 			setError(errorMessage);
 		} finally {
 			setLoading(false);
@@ -63,7 +74,7 @@ export default function LoginPage() {
           </Typography>
           <Box
               sx={{
-                height: 350,
+                height: 400,
                 width: 800,
                 padding: 0,
                 borderRadius: 4,
@@ -91,7 +102,7 @@ export default function LoginPage() {
                 <Box
                     sx={{
                       position: 'absolute',
-                      height: 350,
+                      height: 400,
                       zIndex:1,
                       p: 4,
                       borderRadius: 4,
@@ -108,7 +119,7 @@ export default function LoginPage() {
                       mb: 2,
                       color: textColor
                     }}>
-                      Login
+                      Sign Up
                 </Typography>
                 <TextField
                     label="Email"
@@ -128,6 +139,15 @@ export default function LoginPage() {
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                 />
+                <TextField
+                    label="Confirm Password"
+                    type="password"
+                    variant="outlined"
+                    fullWidth
+                    sx={{ mb: 2, input: { color: textColor }, label: { color: accent } }}
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                />
                 {error && <Typography color="error" sx={{ mb: 2 }}>{error}</Typography>}
                 <Button 
                   variant="contained" 
@@ -137,14 +157,14 @@ export default function LoginPage() {
                     bgcolor: accent, 
                     color: textColor, 
                     boxShadow: '0 2px 8px #6a82fb', ':hover': { bgcolor: '#a259ec' } }}
-                  onClick={handleLogin} 
+                  onClick={handleSignup} 
                   disabled={loading}>
-                    {loading ? 'Logging in...' : 'Login'}
+                    {loading ? 'Creating Account...' : 'Sign Up'}
                 </Button>
                 
                 <Box sx={{ textAlign: 'center', mt: 2 }}>
                   <Typography sx={{ color: textColor, fontSize: 14 }}>
-                    Don't have an account?{' '}
+                    Already have an account?{' '}
                     <Button 
                       variant="text" 
                       sx={{ 
@@ -155,9 +175,9 @@ export default function LoginPage() {
                         minWidth: 'auto',
                         '&:hover': { textDecoration: 'underline', background: 'transparent' }
                       }}
-                      onClick={() => router.push('/signup')}
+                      onClick={() => router.push('/')}
                     >
-                      Sign up here
+                      Login here
                     </Button>
                   </Typography>
                 </Box>
