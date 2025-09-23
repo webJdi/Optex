@@ -6,7 +6,7 @@ import { storeConversation, auth } from '../services/firebase';
 import { useRequireAuth } from '../hooks/useAuth';
 import { fetchPlantReading, PlantReading } from '../services/plantApi';
 import { historizePlantReading, getHistoricalData } from '../services/plantHistory';
-import { Box, Typography, Paper, Button, FormControl, InputLabel, Select, MenuItem, IconButton } from '@mui/material';
+import { Box, Typography, Paper, Button, FormControl, InputLabel, Select, MenuItem, IconButton, Modal } from '@mui/material';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -298,6 +298,17 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [historicalData, setHistoricalData] = useState<PlantReading[]>([]);
   const [selectedKpis, setSelectedKpis] = useState<string[]>(['kpi.shc_kcal_kg']);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedKpiIndex, setSelectedKpiIndex] = useState<number | null>(null);
+
+  const handleOpenModal = (index: number) => {
+    setSelectedKpiIndex(index);
+    setModalOpen(true);
+  };
+  const handleCloseModal = () => {
+    setModalOpen(false);
+    setSelectedKpiIndex(null);
+  };
 
   useEffect(() => {
     if (!user || loading) return; // Skip if not authenticated or still loading
@@ -476,9 +487,7 @@ export default function Dashboard() {
         overflow: 'hidden',
         boxShadow: shadowDrop,
       }}>
-  <Sidebar />
-
-
+        <Sidebar />
         {/* Main Content */}
         <Box sx={{
           flex: 1,
@@ -498,121 +507,159 @@ export default function Dashboard() {
               gap: 3,
               mb: 2
             }}>
-            
-            <Paper 
-              sx={{
-                background: cardBg,
-                border: '1px solid'+ glowCol1,
-                p: 3,
-                borderRadius: 4,
-                color: glowCol1,
-                display: 'flex',
-                flexDirection: 'row',
-                minWidth: 200,
-                transition: '0.3s',
-                '&:hover': {
-                  boxShadow: '0 4px 24px 0 rgba(0,230,254,0.5)',
-                  //background: glowBg1
-                },
-              }}>
-                <LocalFireDepartmentIcon fontSize="large" sx={{ color: glowCol1 }} />
+            {/* Card 1 */}
+            <Box sx={{ cursor: 'pointer', flex: 1 }} onClick={() => handleOpenModal(0)}>
+              <Paper 
+                sx={{
+                  background: cardBg,
+                  border: '1px solid'+ glowCol1,
+                  p: 3,
+                  borderRadius: 4,
+                  color: glowCol1,
+                  display: 'flex',
+                  flexDirection: 'row',
+                  minWidth: 200,
+                  transition: '0.3s',
+                  '&:hover': {
+                    boxShadow: '0 4px 24px 0 rgba(0,230,254,0.5)',
+                    //background: glowBg1
+                  },
+                }}>
+                  <LocalFireDepartmentIcon fontSize="large" sx={{ color: glowCol1 }} />
+                  <Box
+                    sx={{ display: 'flex', flexDirection: 'column', ml: 2, justifyContent: 'center' }}
+                  >
+                    <Typography variant="h6">
+                    {reading ? `${reading.kpi.shc_kcal_kg} kcal/kg` : 'Loading...'}
+                    </Typography>
+                    <Typography sx={{ color: glowCol1, fontSize: 12 }}>Specific Heat Consumption</Typography>
+                  </Box>
+              </Paper>
+            </Box>
+            {/* Card 2 */}
+            <Box sx={{ cursor: 'pointer', flex: 1 }} onClick={() => handleOpenModal(1)}>
+              <Paper 
+                sx={{
+                  background: cardBg,
+                  border: '1px solid '+ glowCol2,
+                  p: 3,
+                  borderRadius: 4,
+                  color: glowCol2,
+                  display: 'flex',
+                  flexDirection: 'row',
+                  minWidth: 200,
+                  transition: '0.3s',
+                  '&:hover': {
+                    boxShadow: '0 4px 24px 0'+ glowCol2,
+                    //background: glowBg2
+                  },
+                }}>
+                <LocalShippingIcon fontSize="large" sx={{ color: glowCol2 }} />
                 <Box
                   sx={{ display: 'flex', flexDirection: 'column', ml: 2, justifyContent: 'center' }}
                 >
                   <Typography variant="h6">
-                  {reading ? `${reading.kpi.shc_kcal_kg} kcal/kg` : 'Loading...'}
+                    {reading ? `${reading.kpi.lsf}` : 'Loading...'}
                   </Typography>
-                  <Typography sx={{ color: glowCol1, fontSize: 12 }}>Specific Heat Consumption</Typography>
+                  <Typography sx={{ color: glowCol2, fontSize: 12 }}>Lime Saturation Factor (LSF)</Typography>
                 </Box>
-            </Paper>
-
-
-            <Paper 
-              sx={{
-                background: cardBg,
-                border: '1px solid '+ glowCol2,
-                p: 3,
-                borderRadius: 4,
-                color: glowCol2,
-                display: 'flex',
-                flexDirection: 'row',
-                minWidth: 200,
-                transition: '0.3s',
-                '&:hover': {
-                  boxShadow: '0 4px 24px 0'+ glowCol2,
-                  //background: glowBg2
-                },
-              }}>
-              <LocalShippingIcon fontSize="large" sx={{ color: glowCol2 }} />
-              <Box
-                sx={{ display: 'flex', flexDirection: 'column', ml: 2, justifyContent: 'center' }}
-              >
-                <Typography variant="h6">
-                  {reading ? `${reading.kpi.lsf}` : 'Loading...'}
-                </Typography>
-                <Typography sx={{ color: glowCol2, fontSize: 12 }}>Lime Saturation Factor (LSF)</Typography>
-              </Box>
-            </Paper>
-
-
-            <Paper 
-              sx={{
-                background: cardBg,
-                border: '1px solid '+ glowCol3,
-                p: 3,
-                borderRadius: 4,
-                color: glowCol3,
-                minWidth: 200,
-                display: 'flex',
-                flexDirection: 'row',
-                transition: '0.3s',
-                '&:hover': {
-                  boxShadow: '0 4px 24px 0'+ glowCol3,
-                  //background: glowBg3
-                },
-              }}>
-              <PowerIcon fontSize="large" sx={{ color: glowCol3 }} />
-              <Box
-                sx={{ display: 'flex', flexDirection: 'column', ml: 2, justifyContent: 'center' }}
-              >
-                <Typography variant="h6">
-                  {reading ? `${reading.kpi.sec_kwh_ton} kWh/t` : 'Loading...'}
-                </Typography>
-                <Typography sx={{ color: glowCol3, fontSize: 12 }}>Specific Power Consumption</Typography>
-              </Box>
-            </Paper>
-
-
-            <Paper 
-              sx={{
-                background: cardBg,
-                border: '1px solid '+ glowCol4,
-                p: 3,
-                borderRadius: 4,
-                color: glowCol4,
-                minWidth: 200,
-                display: 'flex',
-                flexDirection: 'row',
-                transition: '0.3s',
-                '&:hover': {
-                  boxShadow: '0 4px 24px 0'+ glowCol4,
-                  //background: glowBg4
-                },
-              }}>
-              <SolarPowerIcon fontSize="large" sx={{ color: glowCol4 }} />
-              <Box
-                sx={{ display: 'flex', flexDirection: 'column', ml: 2, justifyContent: 'center' }}
-              >
-                <Typography variant="h6">
-                  {reading ? `${reading.kpi.tsr_pct} %` : 'Loading...'}
-                </Typography>
-                <Typography sx={{ color: glowCol4, fontSize: 12 }}>TSR (Alt. Fuel Ratio)</Typography>
-              </Box>
-            </Paper>
- 
-
+              </Paper>
+            </Box>
+            {/* Card 3 */}
+            <Box sx={{ cursor: 'pointer', flex: 1 }} onClick={() => handleOpenModal(2)}>
+              <Paper 
+                sx={{
+                  background: cardBg,
+                  border: '1px solid '+ glowCol3,
+                  p: 3,
+                  borderRadius: 4,
+                  color: glowCol3,
+                  minWidth: 200,
+                  display: 'flex',
+                  flexDirection: 'row',
+                  transition: '0.3s',
+                  '&:hover': {
+                    boxShadow: '0 4px 24px 0'+ glowCol3,
+                    //background: glowBg3
+                  },
+                }}>
+                <PowerIcon fontSize="large" sx={{ color: glowCol3 }} />
+                <Box
+                  sx={{ display: 'flex', flexDirection: 'column', ml: 2, justifyContent: 'center' }}
+                >
+                  <Typography variant="h6">
+                    {reading ? `${reading.kpi.sec_kwh_ton} kWh/t` : 'Loading...'}
+                  </Typography>
+                  <Typography sx={{ color: glowCol3, fontSize: 12 }}>Specific Power Consumption</Typography>
+                </Box>
+              </Paper>
+            </Box>
+            {/* Card 4 */}
+            <Box sx={{ cursor: 'pointer', flex: 1 }} onClick={() => handleOpenModal(3)}>
+              <Paper 
+                sx={{
+                  background: cardBg,
+                  border: '1px solid '+ glowCol4,
+                  p: 3,
+                  borderRadius: 4,
+                  color: glowCol4,
+                  minWidth: 200,
+                  display: 'flex',
+                  flexDirection: 'row',
+                  transition: '0.3s',
+                  '&:hover': {
+                    boxShadow: '0 4px 24px 0'+ glowCol4,
+                    //background: glowBg4
+                  },
+                }}>
+                <SolarPowerIcon fontSize="large" sx={{ color: glowCol4 }} />
+                <Box
+                  sx={{ display: 'flex', flexDirection: 'column', ml: 2, justifyContent: 'center' }}
+                >
+                  <Typography variant="h6">
+                    {reading ? `${reading.kpi.tsr_pct} %` : 'Loading...'}
+                  </Typography>
+                  <Typography sx={{ color: glowCol4, fontSize: 12 }}>TSR (Alt. Fuel Ratio)</Typography>
+                </Box>
+              </Paper>
+            </Box>
           </Box>
 
+          {/* KPI Modal */}
+          <Modal open={modalOpen} onClose={handleCloseModal}>
+            <Box sx={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              bgcolor: cardBg,
+              borderRadius: 4,
+              boxShadow: 24,
+              p: 4,
+              minWidth: 320,
+              color: textColor,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 2,
+            }}>
+              <Typography variant="h6" sx={{ mb: 2 }}>
+                {selectedKpiIndex === 0 && 'Specific Heat Consumption'}
+                {selectedKpiIndex === 1 && 'Lime Saturation Factor (LSF)'}
+                {selectedKpiIndex === 2 && 'Specific Power Consumption'}
+                {selectedKpiIndex === 3 && 'TSR (Alt. Fuel Ratio)'}
+              </Typography>
+              <Typography variant="body1" sx={{ fontSize: 18, fontWeight: 600 }}>
+                {selectedKpiIndex === 0 && (reading ? `${reading.kpi.shc_kcal_kg} kcal/kg` : 'Loading...')}
+                {selectedKpiIndex === 1 && (reading ? `${reading.kpi.lsf}` : 'Loading...')}
+                {selectedKpiIndex === 2 && (reading ? `${reading.kpi.sec_kwh_ton} kWh/t` : 'Loading...')}
+                {selectedKpiIndex === 3 && (reading ? `${reading.kpi.tsr_pct} %` : 'Loading...')}
+              </Typography>
+              <Button variant="contained" color="primary" onClick={handleCloseModal} sx={{ mt: 2 }}>
+                Close
+              </Button>
+            </Box>
+          </Modal>
 
           {/* Interactive Chart */}
           <Paper
