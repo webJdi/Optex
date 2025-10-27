@@ -120,14 +120,16 @@ function VoiceChatButton() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: input }),
     });
-    let answer = (await res.json()).answer;
+    let data = await res.json();
+    let answer = typeof data.answer === 'string' ? data.answer : '';
     // Remove asterisks from response
     answer = answer.replace(/\*/g, '').trim();
+    if (!answer) answer = "Sorry, I couldn't process your request.";
     setResponse(answer);
     speak(answer);
     // Store query and cleaned response in Firestore
-  const userId = auth.currentUser?.uid || 'anonymous';
-  storeConversation(input, answer, userId);
+    const userId = auth.currentUser?.uid || 'anonymous';
+    storeConversation(input, answer, userId);
     // Prepare for next command
     setVoiceSent(false);
     setInput('');
@@ -636,7 +638,7 @@ export default function Dashboard() {
               borderRadius: 4,
               boxShadow: 24,
               p: 4,
-              minWidth: 320,
+              minWidth: 340,
               color: textColor,
               display: 'flex',
               flexDirection: 'column',
@@ -649,12 +651,59 @@ export default function Dashboard() {
                 {selectedKpiIndex === 2 && 'Specific Power Consumption'}
                 {selectedKpiIndex === 3 && 'TSR (Alt. Fuel Ratio)'}
               </Typography>
-              <Typography variant="body1" sx={{ fontSize: 18, fontWeight: 600 }}>
-                {selectedKpiIndex === 0 && (reading ? `${reading.kpi.shc_kcal_kg} kcal/kg` : 'Loading...')}
-                {selectedKpiIndex === 1 && (reading ? `${reading.kpi.lsf}` : 'Loading...')}
-                {selectedKpiIndex === 2 && (reading ? `${reading.kpi.sec_kwh_ton} kWh/t` : 'Loading...')}
-                {selectedKpiIndex === 3 && (reading ? `${reading.kpi.tsr_pct} %` : 'Loading...')}
-              </Typography>
+              {/* Show all plant parameters used to calculate the KPI */}
+              {reading && (
+                <Box sx={{ width: '100%', mt: 1 }}>
+                  {selectedKpiIndex === 0 && (
+                    <>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Parameters for SHC (kcal/kg):</Typography>
+                      <Box sx={{ pl: 1 }}>
+                        <Typography>Raw Mill Power: {reading.raw_mill.power_kw} kW</Typography>
+                        <Typography>Mill Throughput: {reading.raw_mill.mill_throughput_tph} t/h</Typography>
+                        <Typography>Burning Zone Temp: {reading.kiln.burning_zone_temp_c} °C</Typography>
+                        <Typography>Traditional Fuel Rate: {reading.kiln.trad_fuel_rate_kg_hr} kg/hr</Typography>
+                        <Typography>Alternative Fuel Rate: {reading.kiln.alt_fuel_rate_kg_hr} kg/hr</Typography>
+                        <Typography>Clinker Rate: {reading.production.clinker_rate_tph} t/h</Typography>
+                        <Typography>Clinker Temp: {reading.production.clinker_temp_c} °C</Typography>
+                      </Box>
+                    </>
+                  )}
+                  {selectedKpiIndex === 1 && (
+                    <>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Parameters for LSF:</Typography>
+                      <Box sx={{ pl: 1 }}>
+                        <Typography>Limestone Feeder: {reading.raw_mill.limestone_feeder_pct} %</Typography>
+                        <Typography>Clay Feeder: {reading.raw_mill.clay_feeder_pct} %</Typography>
+                        <Typography>Mill Power: {reading.raw_mill.power_kw} kW</Typography>
+                        <Typography>Mill Vibration: {reading.raw_mill.mill_vibration_mm_s} mm/s</Typography>
+                        <Typography>Separator Speed: {reading.raw_mill.separator_speed_rpm} RPM</Typography>
+                      </Box>
+                    </>
+                  )}
+                  {selectedKpiIndex === 2 && (
+                    <>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Parameters for SEC (kWh/t):</Typography>
+                      <Box sx={{ pl: 1 }}>
+                        <Typography>Mill Power Consumption: {reading.raw_mill.mill_power_kwh_ton} kWh/t</Typography>
+                        <Typography>Mill Power: {reading.raw_mill.power_kw} kW</Typography>
+                        <Typography>Mill Throughput: {reading.raw_mill.mill_throughput_tph} t/h</Typography>
+                        <Typography>Clinker Rate: {reading.production.clinker_rate_tph} t/h</Typography>
+                      </Box>
+                    </>
+                  )}
+                  {selectedKpiIndex === 3 && (
+                    <>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Parameters for TSR (%):</Typography>
+                      <Box sx={{ pl: 1 }}>
+                        <Typography>Alt. Fuel Rate: {reading.kiln.alt_fuel_rate_kg_hr} kg/hr</Typography>
+                        <Typography>Trad. Fuel Rate: {reading.kiln.trad_fuel_rate_kg_hr} kg/hr</Typography>
+                        <Typography>Clinker Rate: {reading.production.clinker_rate_tph} t/h</Typography>
+                      </Box>
+                    </>
+                  )}
+                </Box>
+              )}
+              {!reading && <Typography>Loading...</Typography>}
               <Button variant="contained" color="primary" onClick={handleCloseModal} sx={{ mt: 2 }}>
                 Close
               </Button>
