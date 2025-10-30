@@ -23,7 +23,11 @@ export async function fetchMLPredictions(input?: PredictionInput): Promise<Predi
   const url = input 
     ? 'http://127.0.0.1:8000/predict'
     : 'http://127.0.0.1:8000/predict_from_current_state';
-    
+  
+  //const url = input
+  //  ? `${process.env.NEXT_PUBLIC_SIM_API_URL}/predict`
+  //  : `${process.env.NEXT_PUBLIC_SIM_API_URL}/predict_from_current_state`;
+
   const options = input 
     ? {
         method: 'POST',

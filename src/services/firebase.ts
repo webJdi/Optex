@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
-import { getFirestore, collection, addDoc, Timestamp } from "firebase/firestore";
+import { getFirestore, collection, addDoc, Timestamp, doc, setDoc } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -41,6 +41,15 @@ export async function signup(email: string, password: string) {
 
 export async function logout() {
   return signOut(auth);
+}
+
+export async function updateApcLimits(variableName: string, values: { pv: string; ll: string; hl: string }) {
+  try {
+    const docRef = doc(collection(db, "apclimits"), variableName);
+    await setDoc(docRef, values);
+  } catch (error) {
+    console.error("Error updating APC limits:", error);
+  }
 }
 
 export { app, analytics };

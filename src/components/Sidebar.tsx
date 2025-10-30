@@ -84,6 +84,19 @@ export default function Sidebar() {
             </ListItem>
             <ListItem>
                 <Button 
+                  onClick={() => handleNavigation('/apclimits')}
+                  sx={{ color: router.pathname === '/apclimits' ? accent : textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none',
+                    '&:hover': {
+                      backgroundColor: router.pathname === '/apclimits' ? accent : 'rgba(0, 230, 254, 0.1)',
+                      color: router.pathname === '/apclimits' ? textColor2 : accent,
+                    }
+                  }}
+                >
+                  <FactoryIcon /> <Typography fontSize={'0.9em'} sx={{fontFamily: `'Montserrat', sans-serif`}}>APC Limits</Typography>
+                </Button>
+            </ListItem>
+            <ListItem>
+                <Button 
                   onClick={() => handleNavigation('/optimizer')}
                   sx={{ color: router.pathname === '/optimizer' ? accent : textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none',
                     '&:hover': {

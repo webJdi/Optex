@@ -41,7 +41,10 @@ export interface PlantReading {
 }
 
 export async function fetchPlantReading(): Promise<PlantReading> {
-  const res = await fetch('http://127.0.0.1:8000/live_plant_state');
+  const apiUrl = process.env.NEXT_PUBLIC_SIM_API_URL;
+  //Keeping this for testing purpose
+  //const res = await fetch('http://127.0.0.1:8000/live_plant_state');
+  const res = await fetch(`${apiUrl}/live_plant_state`);
   if (!res.ok) throw new Error('Failed to fetch plant reading');
   return await res.json();
 }
