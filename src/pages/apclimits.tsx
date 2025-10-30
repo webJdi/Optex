@@ -139,10 +139,6 @@ export default function SoftSensors() {
             <PageHeader pageName="APC Limits" />
           </Box>
 
-
-          <Typography sx={{ color: textColor, opacity: 0.7, mb: 4 }}>
-            With all of the styling tool options available in today's market
-          </Typography>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
             <Box>
               <Typography variant="h6" sx={{ color: textColor, fontWeight: 600, mb: 2 }}>
