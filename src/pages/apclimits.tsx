@@ -18,7 +18,7 @@ interface Variable {
   pv: number;
   ll: number;
   hl: number;
-  mappingKey?: string; // Key to map to plant reading data
+  mappingKey?: string;
 }
 
 // Helper function to get nested property values from plant reading
@@ -113,67 +113,54 @@ export default function SoftSensors() {
     return () => { document.body.style.margin = ''; };
   }, []);
 
-  // Fetch plant reading from backend
+  // Fetch plant reading and limits from Firestore
   useEffect(() => {
     if (!user || loading) return;
     
-    const pollReading = async () => {
+    const fetchAllData = async () => {
       try {
-        const data = await fetchLatestPlantReading();
-        setReading(data);
+        // Fetch both limits and latest reading
+        const [limitsData, readingData] = await Promise.all([
+          fetchLimitsFromFirebase(),
+          fetchLatestPlantReading()
+        ]);
+        
+        if (readingData) {
+          setReading(readingData);
+          
+          // Update PV values immediately
+          const updatedMvLimits = limitsData.mvLimits.map(variable => ({
+            ...variable,
+            pv: variable.mappingKey ? getNestedValue(readingData, variable.mappingKey) : 0
+          }));
+          
+          const updatedCvLimits = limitsData.cvLimits.map(variable => ({
+            ...variable,
+            pv: variable.mappingKey ? getNestedValue(readingData, variable.mappingKey) : 0
+          }));
+          
+          setManipulatedVars(updatedMvLimits);
+          setControlledVars(updatedCvLimits);
+        } else {
+          // No reading available, set limits with PV = 0
+          setManipulatedVars(limitsData.mvLimits);
+          setControlledVars(limitsData.cvLimits);
+        }
+        
         setError(null);
       } catch (e) {
-        const errorMessage = e instanceof Error ? e.message : 'Error fetching reading';
+        const errorMessage = e instanceof Error ? e.message : 'Error fetching data';
         setError(errorMessage);
       }
     };
     
     // Initial fetch
-    pollReading();
+    fetchAllData();
     
-    // Poll every 1 minute
-    const interval = setInterval(pollReading, 60000);
+    // Poll every 5 minutes
+    const interval = setInterval(fetchAllData, 300000);
     return () => clearInterval(interval);
   }, [user, loading]);
-
-  // Fetch data from Firebase and update PVs from plant reading
-  useEffect(() => {
-    if (!user || loading) return;
-    
-    const fetchData = async () => {
-      const { mvLimits, cvLimits } = await fetchLimitsFromFirebase();
-      setManipulatedVars(mvLimits);
-      setControlledVars(cvLimits);
-    };
-    fetchData();
-  }, [user, loading]);
-
-  // Update PV values when reading changes
-  useEffect(() => {
-    if (!reading) return;
-    
-    console.log('Updating PV values with reading:', reading); // Debug log
-    
-    // Update manipulated variables
-    setManipulatedVars(prev => prev.map(variable => {
-      const pv = variable.mappingKey ? getNestedValue(reading, variable.mappingKey) : 0;
-      console.log(`MV ${variable.name} (${variable.mappingKey}):`, pv); // Debug log
-      return {
-        ...variable,
-        pv
-      };
-    }));
-    
-    // Update controlled variables
-    setControlledVars(prev => prev.map(variable => {
-      const pv = variable.mappingKey ? getNestedValue(reading, variable.mappingKey) : 0;
-      console.log(`CV ${variable.name} (${variable.mappingKey}):`, pv); // Debug log
-      return {
-        ...variable,
-        pv
-      };
-    }));
-  }, [reading]);
 
   // Show loading spinner while checking authentication
   if (loading) {
@@ -285,66 +272,211 @@ export default function SoftSensors() {
             <PageHeader pageName="APC Limits" />
           </Box>
 
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-            <Box>
-              <Typography variant="h6" sx={{ color: textColor, fontWeight: 600, mb: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, gap: 4 }}>
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="h6" sx={{ color: textColor, fontWeight: 600, mb: 3 }}>
                 Manipulated Variables
               </Typography>
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <Typography sx={{ color: textColor, width: 250 }}> </Typography>
-                <Typography sx={{ color: textColor, width: 40 }}>PV</Typography>
-                <Typography sx={{ color: textColor, width: 40 }}>LL</Typography>
-                <Typography sx={{ color: textColor, width: 40 }}>HL</Typography>
+              <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
+                <Typography sx={{ color: textColor, width: 250, fontSize: 14, opacity: 0.7 }}> </Typography>
+                <Typography sx={{ color: textColor, width: 80, fontSize: 14, opacity: 0.7, textAlign: 'center' }}>PV</Typography>
+                <Typography sx={{ color: textColor, width: 80, fontSize: 14, opacity: 0.7, textAlign: 'center' }}>LL</Typography>
+                <Typography sx={{ color: textColor, width: 80, fontSize: 14, opacity: 0.7, textAlign: 'center' }}>HL</Typography>
               </Box>
               {manipulatedVars.map((row: Variable, idx: number) => (
-                <Box key={idx} sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 1 }}>
-                  <Typography sx={{ color: textColor, width: 250 }}>{row.name}</Typography>
-                  <Paper sx={{ width: 40, textAlign: 'center', bgcolor: cardBg, color: textColor, p: 1 }}>
-                    {row.pv.toFixed(2)}
-                  </Paper>
-                  <Paper
-                    sx={{ width: 40, textAlign: 'center', bgcolor: cardBg, color: textColor, p: 1, cursor: 'pointer' }}
-                    onClick={() => handleOpenModal(row)}
+                <Box key={idx} sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 2 }}>
+                  <Typography sx={{ color: textColor, width: 250, fontSize: 14 }}>{row.name}</Typography>
+                  <Box
+                    sx={{
+                      width: 80,
+                      height: 50,
+                      
+                      borderRadius: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: textColor,
+                      fontSize: 16,
+                      fontWeight: 500,
+                    }}
                   >
-                    {row.ll}
-                  </Paper>
-                  <Paper
-                    sx={{ width: 40, textAlign: 'center', bgcolor: cardBg, color: textColor, p: 1, cursor: 'pointer' }}
-                    onClick={() => handleOpenModal(row)}
+                    {row.pv.toFixed(0)}
+                  </Box>
+                  <Box
+                  sx={{
+                    width: 160,
+                    height: 50,
+                    background: 'linear-gradient(135deg, rgba(42, 39, 82, 0.6) 0%, rgba(31, 28, 68, 0.8) 100%)',
+                    //border: '1px solid rgba(106, 130, 251, 0.3)',
+                    borderRadius: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: textColor,
+                    fontSize: 16,
+                    fontWeight: 500,
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+                  }}
                   >
-                    {row.hl}
-                  </Paper>
+                    <Box
+                      sx={{
+                          width: 80,
+                          height: 50,
+                          background: 'linear-gradient(135deg, rgba(42, 39, 82, 0.6) 0%, rgba(31, 28, 68, 0.8) 100%)',
+                          borderRight: '1px solid rgba(106, 130, 251, 0.3)',
+                          borderRadius: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: textColor,
+                          fontSize: 16,
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          
+                          '&:hover': {
+                            background: 'linear-gradient(135deg, rgba(52, 49, 92, 0.8) 0%, rgba(41, 38, 78, 1) 100%)',
+                            borderColor: 'rgba(106, 130, 251, 0.6)',
+                            transform: 'translateY(-2px)',
+                            boxShadow: '0 4px 12px rgba(106, 130, 251, 0.3)',
+                          },
+                        }}
+                      onClick={() => handleOpenModal(row)}
+                    >
+                      {row.ll}
+                    </Box>
+                    <Box
+                      sx={{
+                          width: 80,
+                          height: 50,
+                          background: 'linear-gradient(135deg, rgba(42, 39, 82, 0.6) 0%, rgba(31, 28, 68, 0.8) 100%)',
+                          
+                          borderRadius: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: textColor,
+                          fontSize: 16,
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          
+                          '&:hover': {
+                            background: 'linear-gradient(135deg, rgba(52, 49, 92, 0.8) 0%, rgba(41, 38, 78, 1) 100%)',
+                            borderColor: 'rgba(106, 130, 251, 0.6)',
+                            transform: 'translateY(-2px)',
+                            boxShadow: '0 4px 12px rgba(106, 130, 251, 0.3)',
+                          },
+                        }}
+                      onClick={() => handleOpenModal(row)}
+                    >
+                      {row.hl}
+                    </Box>
+                  </Box>
                 </Box>
               ))}
             </Box>
-            <Box>
-              <Typography variant="h6" sx={{ color: textColor, fontWeight: 600, mb: 2 }}>
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="h6" sx={{ color: textColor, fontWeight: 600, mb: 3 }}>
                 Controlled Variables
               </Typography>
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <Typography sx={{ color: textColor, width: 250 }}> </Typography>
-                <Typography sx={{ color: textColor, width: 40 }}>PV</Typography>
-                <Typography sx={{ color: textColor, width: 40 }}>LL</Typography>
-                <Typography sx={{ color: textColor, width: 40 }}>HL</Typography>
+              <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
+                <Typography sx={{ color: textColor, width: 250, fontSize: 14, opacity: 0.7 }}> </Typography>
+                <Typography sx={{ color: textColor, width: 80, fontSize: 14, opacity: 0.7, textAlign: 'center' }}>PV</Typography>
+                <Typography sx={{ color: textColor, width: 80, fontSize: 14, opacity: 0.7, textAlign: 'center' }}>LL</Typography>
+                <Typography sx={{ color: textColor, width: 80, fontSize: 14, opacity: 0.7, textAlign: 'center' }}>HL</Typography>
               </Box>
               {controlledVars.map((row: Variable, idx: number) => (
-                <Box key={idx} sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 1 }}>
-                  <Typography sx={{ color: textColor, width: 250 }}>{row.name}</Typography>
-                  <Paper sx={{ width: 40, textAlign: 'center', bgcolor: cardBg, color: textColor, p: 1 }}>
-                    {row.pv.toFixed(2)}
-                  </Paper>
-                  <Paper
-                    sx={{ width: 40, textAlign: 'center', bgcolor: cardBg, color: textColor, p: 1, cursor: 'pointer' }}
-                    onClick={() => handleOpenModal(row)}
+                <Box key={idx} sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 2 }}>
+                  <Typography sx={{ color: textColor, width: 250, fontSize: 14 }}>{row.name}</Typography>
+                  <Box
+                    sx={{
+                      width: 80,
+                      height: 50,
+                      
+                      borderRadius: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: textColor,
+                      fontSize: 16,
+                      fontWeight: 500,
+                      
+                    }}
                   >
-                    {row.ll}
-                  </Paper>
-                  <Paper
-                    sx={{ width: 40, textAlign: 'center', bgcolor: cardBg, color: textColor, p: 1, cursor: 'pointer' }}
-                    onClick={() => handleOpenModal(row)}
+                    {row.pv.toFixed(0)}
+                  </Box>
+                  <Box
+                  sx={{
+                    width: 160,
+                    height: 50,
+                    background: 'linear-gradient(135deg, rgba(42, 39, 82, 0.6) 0%, rgba(31, 28, 68, 0.8) 100%)',
+                    //border: '1px solid rgba(106, 130, 251, 0.3)',
+                    borderRadius: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: textColor,
+                    fontSize: 16,
+                    fontWeight: 500,
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+                  }}
                   >
-                    {row.hl}
-                  </Paper>
+                      <Box
+                        sx={{
+                          width: 80,
+                          height: 50,
+                          background: 'linear-gradient(135deg, rgba(42, 39, 82, 0.6) 0%, rgba(31, 28, 68, 0.8) 100%)',
+                          borderRight: '1px solid rgba(106, 130, 251, 0.3)',
+                          borderRadius: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: textColor,
+                          fontSize: 16,
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          
+                          '&:hover': {
+                            background: 'linear-gradient(135deg, rgba(52, 49, 92, 0.8) 0%, rgba(41, 38, 78, 1) 100%)',
+                            borderColor: 'rgba(106, 130, 251, 0.6)',
+                            transform: 'translateY(-2px)',
+                            boxShadow: '0 4px 12px rgba(106, 130, 251, 0.3)',
+                          },
+                        }}
+                        onClick={() => handleOpenModal(row)}
+                      >
+                        {row.ll}
+                      </Box>
+                      <Box
+                        sx={{
+                          width: 80,
+                          height: 50,
+                          background: 'linear-gradient(135deg, rgba(42, 39, 82, 0.6) 0%, rgba(31, 28, 68, 0.8) 100%)',
+                          
+                          borderRadius: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: textColor,
+                          fontSize: 16,
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          
+                          '&:hover': {
+                            background: 'linear-gradient(135deg, rgba(52, 49, 92, 0.8) 0%, rgba(41, 38, 78, 1) 100%)',
+                            borderColor: 'rgba(106, 130, 251, 0.6)',
+                            transform: 'translateY(-2px)',
+                            boxShadow: '0 4px 12px rgba(106, 130, 251, 0.3)',
+                          },
+                        }}
+                        onClick={() => handleOpenModal(row)}
+                      >
+                        {row.hl}
+                      </Box>
+                  </Box>
                 </Box>
               ))}
             </Box>
