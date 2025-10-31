@@ -43,10 +43,10 @@ export async function logout() {
   return signOut(auth);
 }
 
-export async function updateApcLimits(variableName: string, values: { pv: string; ll: string; hl: string }) {
+export async function updateApcLimits(variableName: string, values: { ll: string; hl: string }) {
   try {
     const docRef = doc(collection(db, "apclimits"), variableName);
-    await setDoc(docRef, values);
+    await setDoc(docRef, values, { merge: true }); // Use merge to only update specified fields
   } catch (error) {
     console.error("Error updating APC limits:", error);
   }
