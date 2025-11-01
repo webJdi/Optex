@@ -2,22 +2,14 @@ import React from 'react';
 import { Box, Typography, List, ListItem, Button } from '@mui/material';
 import { useRouter } from 'next/router';
 import DashboardIcon from '@mui/icons-material/Dashboard';
-import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import AllInclusiveIcon from '@mui/icons-material/AllInclusive';
 import BuildIcon from '@mui/icons-material/Build';
-
-import VideogameAssetIcon from '@mui/icons-material/VideogameAsset';
 import FactoryIcon from '@mui/icons-material/Factory';
-import SmartToyIcon from '@mui/icons-material/SmartToy';
 
 const accent = '#00e6fe';
-const cardBg = '#17153A';
 const textColor = '#fff';
 const textColor2 = '#17153A';
-const gradientBg = 'linear-gradient(-120deg, #ea67cfff 0%, #5b2be1 100%)';
 const menuGrad = 'linear-gradient(180deg, #262250 0%, #17163B 100%)';
-const shadowDrop = '3px 5px 23px 3px rgba(0,0,0,0.39);'
-const glowBg = 'linear-gradient(135deg, #40DDFF 0%, #0B98C5 100%)';
 
 
 export default function Sidebar() {

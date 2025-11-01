@@ -98,9 +98,9 @@ const OptimizationHistory: React.FC = () => {
       latestEng?.trials.length || 0
     );
 
-    const chartData = [];
+    const chartData: { trial: number; apc?: number; engineering?: number }[] = [];
     for (let i = 0; i < maxLength; i++) {
-      const dataPoint: any = { trial: i + 1 };
+      const dataPoint: { trial: number; apc?: number; engineering?: number } = { trial: i + 1 };
       
       if (latestApc && i < latestApc.trials.length) {
         dataPoint.apc = latestApc.trials[i].value;

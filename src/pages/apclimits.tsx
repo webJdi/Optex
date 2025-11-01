@@ -1,12 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/router';
 import { useRequireAuth } from '../hooks/useAuth';
 import { PlantReading } from '../services/plantApi';
 import { Box, Typography, Paper, Dialog, DialogActions, DialogContent, DialogTitle, Button, TextField } from '@mui/material';
 import Sidebar from '../components/Sidebar';
 import PageHeader from '../components/PageHeader';
-import { accent, cardBg, textColor, textColor2, textColor3, gradientBg, glowBg1, glowBg2, glowBg3, glowBg4, shadowDrop, col1, col2, col3, col4, glowCol1, glowCol2, glowCol3, glowCol4 } from '../components/ColorPalette';
+import { accent, cardBg, textColor, textColor2, textColor3, gradientBg, glowBg1, glowBg2, glowBg3, glowBg4, shadowDrop, col1, col2, col3, col4, glowCol1, glowCol2 } from '../components/ColorPalette';
 import { updateApcLimits } from '../services/firebase';
 import { collection, getDocs, query, orderBy, limit, doc, setDoc, deleteDoc, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -133,7 +132,6 @@ const fetchLatestPlantReading = async (): Promise<PlantReading | null> => {
 
 export default function SoftSensors() {
   const { user, loading } = useRequireAuth();
-  const router = useRouter();
 
   const [open, setOpen] = useState(false);
   const [selectedVar, setSelectedVar] = useState<Variable | null>(null);
