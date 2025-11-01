@@ -16,6 +16,8 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
 // Define function schemas for Gemini function calling
+// This is kept for documentation purposes - the actual function calling is handled via JSON parsing
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const mlFunctions = [
   {
     name: "analyze_dataset",
@@ -321,7 +323,7 @@ If this requires a function call, respond with the JSON. Otherwise, provide help
     });
 
     let responseText = result.text || '';
-    let functionResults: any[] = [];
+    const functionResults: any[] = [];
 
     // Check if response contains a function call (JSON format)
     const jsonMatch = responseText.match(/\{[\s\S]*"function"[\s\S]*\}/);
