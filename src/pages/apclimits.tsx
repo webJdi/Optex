@@ -500,7 +500,7 @@ export default function SoftSensors() {
           </Box>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, gap: 4 }}>
             <Box sx={{ flex: 1 }}>
-              <Typography variant="h6" sx={{ color: textColor, fontWeight: 600, mb: 3 }}>
+              <Typography variant="h6" sx={{ color: textColor, fontWeight: 100, mb: 3, fontFamily: `'Montserrat', sans-serif` }}>
                 Manipulated Variables
               </Typography>
               <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
@@ -515,7 +515,7 @@ export default function SoftSensors() {
                 
                 return (
                 <Box key={idx} sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 2 }}>
-                  <Typography sx={{ color: textColor, width: 250, fontSize: 14 }}>
+                  <Typography sx={{ color: textColor3, width: 250, fontSize: 14 }}>
                     {row.name}
                     {violating && duration > 0 && (
                       <Typography component="span" sx={{ color: '#ff6b6b', fontSize: 11, ml: 1 }}>
@@ -618,7 +618,7 @@ export default function SoftSensors() {
               })}
             </Box>
             <Box sx={{ flex: 1 }}>
-              <Typography variant="h6" sx={{ color: textColor, fontWeight: 600, mb: 3 }}>
+              <Typography variant="h6" sx={{ color: textColor, fontWeight: 100, mb: 3, fontFamily: `'Montserrat', sans-serif` }}>
                 Controlled Variables
               </Typography>
               <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
@@ -633,7 +633,7 @@ export default function SoftSensors() {
                 
                 return (
                 <Box key={idx} sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 2 }}>
-                  <Typography sx={{ color: textColor, width: 250, fontSize: 14 }}>
+                  <Typography sx={{ color: textColor3, width: 250, fontSize: 14 }}>
                     {row.name}
                     {violating && duration > 0 && (
                       <Typography component="span" sx={{ color: '#ff6b6b', fontSize: 11, ml: 1 }}>

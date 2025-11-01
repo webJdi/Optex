@@ -25,7 +25,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({ pageName }) => {
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-      <Typography variant="h4" sx={{fontFamily: `'Montserrat', sans-serif`, color: textColor, fontWeight: 400 }}>{pageName}</Typography>
+      <Typography variant="h5" sx={{fontFamily: `'Montserrat', sans-serif`, color: textColor, fontWeight: 400 }}>{pageName}</Typography>
       <Box
         sx={{
           display: 'flex',
