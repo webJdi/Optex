@@ -3,8 +3,9 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRequireAuth } from '../hooks/useAuth';
 import { FormControl, Select, MenuItem, SelectChangeEvent } from '@mui/material';
 import Sidebar from '../components/Sidebar';
-import { Box, Typography, Paper, Button, CircularProgress } from '@mui/material';
+import { Box, Typography, Paper, Button, CircularProgress, Modal, TextField, Slider } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import SettingsIcon from '@mui/icons-material/Settings';
 import StopIcon from '@mui/icons-material/Stop';
 import WhatshotIcon from '@mui/icons-material/Whatshot';
 import SpeedIcon from '@mui/icons-material/Speed';
@@ -77,6 +78,19 @@ export default function Optimizer() {
   // State for toggling chart lines
   const [hiddenOptimizationLines, setHiddenOptimizationLines] = useState<Record<string, boolean>>({});
   const [hiddenConstraintLines, setHiddenConstraintLines] = useState<Record<string, boolean>>({});
+  
+  // Settings modal state
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pricing, setPricing] = useState({
+    limestone_price_per_ton: 50,
+    clay_price_per_ton: 40,
+    traditional_fuel_price_per_kg: 0.15,
+    alternative_fuel_price_per_kg: 0.08,
+    clinker_selling_price_per_ton: 120,
+    electricity_price_per_kwh: 0.12,
+    byproduct_credit_per_ton: 10
+  });
+  const [mlFpRatio, setMlFpRatio] = useState(0.3); // ML weight (FP weight = 1 - mlFpRatio)
 
   // Memoize chart data to prevent flickering on re-renders
   const optimizationChartData = useMemo(() => {
@@ -148,6 +162,21 @@ export default function Optimizer() {
 
         // Mark that we've loaded the initial state
         hasLoadedInitialState.current = true;
+
+        // Load settings (pricing and ML/FP ratio) from Firebase
+        const settingsDocRef = doc(db, 'optimizer_settings', 'current');
+        const settingsDoc = await getDoc(settingsDocRef);
+        
+        if (settingsDoc.exists()) {
+          const settings = settingsDoc.data();
+          if (settings.pricing) {
+            setPricing(settings.pricing);
+          }
+          if (settings.mlFpRatio !== undefined) {
+            setMlFpRatio(settings.mlFpRatio);
+          }
+          console.log('Loaded settings from Firebase:', settings);
+        }
 
         // Load latest optimization results from Firebase
         const q = query(
@@ -400,6 +429,27 @@ export default function Optimizer() {
     setTimer(300);
   };
 
+  // Save settings to Firebase
+  const handleSaveSettings = async () => {
+    try {
+      const { db } = await import('../services/firebase');
+      const { doc, setDoc } = await import('firebase/firestore');
+      
+      const settingsDocRef = doc(db, 'optimizer_settings', 'current');
+      await setDoc(settingsDocRef, {
+        pricing,
+        mlFpRatio,
+        lastUpdated: Date.now(),
+        userId: user?.uid
+      });
+      
+      console.log('Settings saved to Firebase:', { pricing, mlFpRatio });
+      setSettingsOpen(false);
+    } catch (error) {
+      console.error('Error saving settings:', error);
+    }
+  };
+
   // Save optimization results to Firebase
   const saveOptimizationToFirebase = async (data: DualOptimizationResponse) => {
     try {
@@ -562,6 +612,9 @@ export default function Optimizer() {
                   </Box>
                 </Box>
               </Box>
+              <Button onClick={() => setSettingsOpen(true)}>
+                <SettingsIcon sx={{ color: textColor3, '&:hover': { color: '#fff' } }} />
+              </Button>
           </Box>
 
           
@@ -985,6 +1038,220 @@ export default function Optimizer() {
           )}
         </Box>
       </Box>
+
+      {/* Settings Modal */}
+      <Modal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      >
+        <Box sx={{
+          width: 600,
+          maxHeight: '80vh',
+          overflowY: 'auto',
+          background: cardBg,
+          borderRadius: 3,
+          p: 4,
+          boxShadow: shadowDrop
+        }}>
+          <Typography sx={{ color: textColor, fontSize: 20, fontWeight: 600, mb: 3 }}>
+            Optimizer Settings
+          </Typography>
+
+          {/* Pricing Section */}
+          <Typography sx={{ color: textColor3, fontSize: 16, fontWeight: 600, mb: 2 }}>
+            Pricing Configuration
+          </Typography>
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 4 }}>
+            <TextField
+              label="Limestone Price ($/ton)"
+              type="number"
+              value={pricing.limestone_price_per_ton}
+              onChange={(e) => setPricing({ ...pricing, limestone_price_per_ton: parseFloat(e.target.value) })}
+              fullWidth
+              InputLabelProps={{ style: { color: textColor3 } }}
+              InputProps={{ style: { color: textColor } }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': { borderColor: 'rgba(106, 130, 251, 0.3)' },
+                  '&:hover fieldset': { borderColor: 'rgba(106, 130, 251, 0.5)' },
+                  '&.Mui-focused fieldset': { borderColor: accent },
+                }
+              }}
+            />
+            
+            <TextField
+              label="Clay Price ($/ton)"
+              type="number"
+              value={pricing.clay_price_per_ton}
+              onChange={(e) => setPricing({ ...pricing, clay_price_per_ton: parseFloat(e.target.value) })}
+              fullWidth
+              InputLabelProps={{ style: { color: textColor3 } }}
+              InputProps={{ style: { color: textColor } }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': { borderColor: 'rgba(106, 130, 251, 0.3)' },
+                  '&:hover fieldset': { borderColor: 'rgba(106, 130, 251, 0.5)' },
+                  '&.Mui-focused fieldset': { borderColor: accent },
+                }
+              }}
+            />
+
+            <TextField
+              label="Traditional Fuel Price ($/kg)"
+              type="number"
+              value={pricing.traditional_fuel_price_per_kg}
+              onChange={(e) => setPricing({ ...pricing, traditional_fuel_price_per_kg: parseFloat(e.target.value) })}
+              fullWidth
+              InputLabelProps={{ style: { color: textColor3 } }}
+              InputProps={{ style: { color: textColor }, inputProps: { step: 0.01 } }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': { borderColor: 'rgba(106, 130, 251, 0.3)' },
+                  '&:hover fieldset': { borderColor: 'rgba(106, 130, 251, 0.5)' },
+                  '&.Mui-focused fieldset': { borderColor: accent },
+                }
+              }}
+            />
+
+            <TextField
+              label="Alternative Fuel Price ($/kg)"
+              type="number"
+              value={pricing.alternative_fuel_price_per_kg}
+              onChange={(e) => setPricing({ ...pricing, alternative_fuel_price_per_kg: parseFloat(e.target.value) })}
+              fullWidth
+              InputLabelProps={{ style: { color: textColor3 } }}
+              InputProps={{ style: { color: textColor }, inputProps: { step: 0.01 } }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': { borderColor: 'rgba(106, 130, 251, 0.3)' },
+                  '&:hover fieldset': { borderColor: 'rgba(106, 130, 251, 0.5)' },
+                  '&.Mui-focused fieldset': { borderColor: accent },
+                }
+              }}
+            />
+
+            <TextField
+              label="Clinker Selling Price ($/ton)"
+              type="number"
+              value={pricing.clinker_selling_price_per_ton}
+              onChange={(e) => setPricing({ ...pricing, clinker_selling_price_per_ton: parseFloat(e.target.value) })}
+              fullWidth
+              InputLabelProps={{ style: { color: textColor3 } }}
+              InputProps={{ style: { color: textColor } }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': { borderColor: 'rgba(106, 130, 251, 0.3)' },
+                  '&:hover fieldset': { borderColor: 'rgba(106, 130, 251, 0.5)' },
+                  '&.Mui-focused fieldset': { borderColor: accent },
+                }
+              }}
+            />
+
+            <TextField
+              label="Electricity Price ($/kWh)"
+              type="number"
+              value={pricing.electricity_price_per_kwh}
+              onChange={(e) => setPricing({ ...pricing, electricity_price_per_kwh: parseFloat(e.target.value) })}
+              fullWidth
+              InputLabelProps={{ style: { color: textColor3 } }}
+              InputProps={{ style: { color: textColor }, inputProps: { step: 0.01 } }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': { borderColor: 'rgba(106, 130, 251, 0.3)' },
+                  '&:hover fieldset': { borderColor: 'rgba(106, 130, 251, 0.5)' },
+                  '&.Mui-focused fieldset': { borderColor: accent },
+                }
+              }}
+            />
+
+            <TextField
+              label="Byproduct Credit ($/ton)"
+              type="number"
+              value={pricing.byproduct_credit_per_ton}
+              onChange={(e) => setPricing({ ...pricing, byproduct_credit_per_ton: parseFloat(e.target.value) })}
+              fullWidth
+              InputLabelProps={{ style: { color: textColor3 } }}
+              InputProps={{ style: { color: textColor } }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': { borderColor: 'rgba(106, 130, 251, 0.3)' },
+                  '&:hover fieldset': { borderColor: 'rgba(106, 130, 251, 0.5)' },
+                  '&.Mui-focused fieldset': { borderColor: accent },
+                }
+              }}
+            />
+          </Box>
+
+          {/* ML/FP Ratio Section */}
+          <Typography sx={{ color: textColor3, fontSize: 16, fontWeight: 600, mb: 2 }}>
+            Model Weight Configuration
+          </Typography>
+
+          <Box sx={{ mb: 4 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+              <Typography sx={{ color: textColor2, fontSize: 13 }}>
+                ML Weight: {(mlFpRatio * 100).toFixed(0)}%
+              </Typography>
+              <Typography sx={{ color: textColor2, fontSize: 13 }}>
+                First Principles Weight: {((1 - mlFpRatio) * 100).toFixed(0)}%
+              </Typography>
+            </Box>
+            <Slider
+              value={mlFpRatio}
+              onChange={(_, value) => setMlFpRatio(value as number)}
+              min={0}
+              max={1}
+              step={0.05}
+              marks={[
+                { value: 0, label: 'FP' },
+                { value: 0.5, label: '50/50' },
+                { value: 1, label: 'ML' }
+              ]}
+              sx={{
+                color: accent,
+                '& .MuiSlider-markLabel': { color: textColor3, fontSize: 10 },
+                '& .MuiSlider-mark': { backgroundColor: textColor3 },
+              }}
+            />
+            <Typography sx={{ color: textColor3, fontSize: 11, mt: 1, fontStyle: 'italic' }}>
+              Adjust the ratio between Machine Learning model and First Principles model predictions
+            </Typography>
+          </Box>
+
+          {/* Action Buttons */}
+          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+            <Button
+              onClick={() => setSettingsOpen(false)}
+              sx={{
+                color: textColor3,
+                borderColor: 'rgba(106, 130, 251, 0.3)',
+                '&:hover': {
+                  borderColor: 'rgba(106, 130, 251, 0.5)',
+                  background: 'rgba(106, 130, 251, 0.1)',
+                }
+              }}
+              variant="outlined"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveSettings}
+              sx={{
+                background: `linear-gradient(135deg, ${accent} 0%, rgba(106, 130, 251, 0.8) 100%)`,
+                color: '#fff',
+                '&:hover': {
+                  background: `linear-gradient(135deg, rgba(106, 130, 251, 0.9) 0%, ${accent} 100%)`,
+                }
+              }}
+              variant="contained"
+            >
+              Save Settings
+            </Button>
+          </Box>
+        </Box>
+      </Modal>
     </Box>
   );
 }

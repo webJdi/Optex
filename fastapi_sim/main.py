@@ -305,10 +305,15 @@ class MLRelationshipModel:
 
 # Hybrid model combining first principles and ML
 class HybridProcessModel:
-    def __init__(self):
+    def __init__(self, ml_weight=0.3):
         self.first_principles = CementProcessModel()
         self.ml_model = MLRelationshipModel()
-        self.ml_weight = 0.3  # Weight for ML vs first principles
+        self.ml_weight = ml_weight  # Weight for ML vs first principles (configurable)
+        
+    def set_ml_weight(self, ml_weight):
+        """Update the ML weight ratio"""
+        self.ml_weight = ml_weight
+        print(f"ML weight updated to: {ml_weight:.2f} (FP: {1-ml_weight:.2f})")
         
     def update_ml_model(self, plant_history):
         """Update ML model with new plant data"""
@@ -921,6 +926,33 @@ async def fetch_apc_limits_from_firebase():
         print(f"✗ Error fetching APC limits from Firebase: {e}")
         return {}
 
+async def fetch_optimizer_settings_from_firebase():
+    """Fetch optimizer settings (pricing and ML/FP ratio) from Firebase"""
+    if db is None:
+        print("⚠ Firebase not initialized, using default settings")
+        return None, 0.3
+    
+    try:
+        settings_ref = db.collection('optimizer_settings').document('current')
+        settings_doc = settings_ref.get()
+        
+        if settings_doc.exists:
+            settings_data = settings_doc.to_dict()
+            pricing_data = settings_data.get('pricing')
+            ml_fp_ratio = settings_data.get('mlFpRatio', 0.3)
+            
+            if pricing_data:
+                pricing = PricingConfig(**pricing_data)
+                print(f"✓ Loaded pricing from Firebase")
+                print(f"✓ Loaded ML/FP ratio: {ml_fp_ratio:.2f} (FP: {1-ml_fp_ratio:.2f})")
+                return pricing, ml_fp_ratio
+            
+        print("⚠ No settings found in Firebase, using defaults")
+        return None, 0.3
+    except Exception as e:
+        print(f"✗ Error fetching settings from Firebase: {e}")
+        return None, 0.3
+
 def calculate_economic_value(optimization_vars, pricing: PricingConfig):
     """Calculate economic value (profit) in $/hour based on optimization variables"""
     
@@ -1151,10 +1183,21 @@ async def optimize_targets_api_post(request: OptimizeRequest):
     Run dual optimization with both APC limits and engineering limits.
     Frontend should NOT call this directly - use GET endpoint instead.
     """
-    global pricing_config, optimization_history
+    global pricing_config, optimization_history, hybrid_model
     
-    # Use custom pricing if provided
-    pricing = request.custom_pricing if request.use_custom_pricing and request.custom_pricing else pricing_config
+    # Fetch settings from Firebase (pricing and ML/FP ratio)
+    firebase_pricing, ml_fp_ratio = await fetch_optimizer_settings_from_firebase()
+    
+    # Use Firebase pricing if available, otherwise use custom or default
+    if firebase_pricing:
+        pricing = firebase_pricing
+    elif request.use_custom_pricing and request.custom_pricing:
+        pricing = request.custom_pricing
+    else:
+        pricing = pricing_config
+    
+    # Update hybrid model ML weight
+    hybrid_model.set_ml_weight(ml_fp_ratio)
     
     # Fetch APC limits from Firebase
     apc_limits = await fetch_apc_limits_from_firebase()
