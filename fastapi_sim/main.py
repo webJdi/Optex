@@ -1877,5 +1877,97 @@ async def check_and_run_optimization():
     except Exception as e:
         return {"error": str(e)}
 
+# ========================================
+# ML BUILDER ENDPOINTS
+# ========================================
+from ml_builder_service import (
+    load_dataset, analyze_dataset, univariate_analysis, bivariate_analysis,
+    correlation_analysis, split_dataset, train_model, tune_hyperparameters,
+    shap_analysis, download_model, get_model_summary
+)
+
+@app.post("/ml/upload_dataset")
+async def upload_dataset_endpoint(
+    session_id: str,
+    filename: str,
+    data: str  # base64 encoded
+):
+    """Upload and load a dataset"""
+    return load_dataset(session_id, data, filename)
+
+@app.get("/ml/analyze_dataset")
+async def analyze_dataset_endpoint(session_id: str):
+    """Get comprehensive dataset analysis"""
+    return analyze_dataset(session_id)
+
+@app.get("/ml/univariate")
+async def univariate_endpoint(session_id: str, column: str):
+    """Univariate analysis for a column"""
+    return univariate_analysis(session_id, column)
+
+@app.get("/ml/bivariate")
+async def bivariate_endpoint(session_id: str, col1: str, col2: str):
+    """Bivariate analysis between two columns"""
+    return bivariate_analysis(session_id, col1, col2)
+
+@app.get("/ml/correlation")
+async def correlation_endpoint(session_id: str):
+    """Correlation analysis with heatmap"""
+    return correlation_analysis(session_id)
+
+@app.post("/ml/split_dataset")
+async def split_dataset_endpoint(
+    session_id: str,
+    target_column: str,
+    test_size: float = 0.2,
+    random_state: int = 42,
+    feature_columns: Optional[List[str]] = None
+):
+    """Split dataset into train/test sets"""
+    return split_dataset(session_id, target_column, test_size, random_state, feature_columns)
+
+@app.post("/ml/train_model")
+async def train_model_endpoint(
+    session_id: str,
+    model_type: str,
+    hyperparameters: Optional[Dict[str, Any]] = None
+):
+    """Train a machine learning model"""
+    if hyperparameters is None:
+        hyperparameters = {}
+    return train_model(session_id, model_type, **hyperparameters)
+
+@app.post("/ml/tune_hyperparameters")
+async def tune_hyperparameters_endpoint(
+    session_id: str,
+    model_type: str,
+    n_trials: int = 50
+):
+    """Hyperparameter tuning with Optuna"""
+    return tune_hyperparameters(session_id, model_type, n_trials)
+
+@app.get("/ml/shap_analysis")
+async def shap_analysis_endpoint(
+    session_id: str,
+    model_name: str,
+    max_samples: int = 100
+):
+    """SHAP analysis for model interpretability"""
+    return shap_analysis(session_id, model_name, max_samples)
+
+@app.get("/ml/download_model")
+async def download_model_endpoint(
+    session_id: str,
+    model_name: str,
+    format: str = "joblib"
+):
+    """Download trained model"""
+    return download_model(session_id, model_name, format)
+
+@app.get("/ml/model_summary")
+async def model_summary_endpoint(session_id: str):
+    """Get summary of ML session"""
+    return get_model_summary(session_id)
+
 # Generate initial data after all functions are defined
 generate_initial_data()
