@@ -328,7 +328,7 @@ export default function Dashboard() {
         }
       };
       pollReading();
-    }, 60000); // poll every 1 min
+    }, 15000); // poll every 15 seconds for real-time updates
     
     // Initial fetch
     const pollReading = async () => {
@@ -356,8 +356,8 @@ export default function Dashboard() {
     };
     fetchHistoricalData();
     
-    // Refresh chart data every 2 minutes
-    const chartInterval = setInterval(fetchHistoricalData, 120000); // 2 minutes
+    // Refresh chart data every 30 seconds for real-time visualization
+    const chartInterval = setInterval(fetchHistoricalData, 30000);
     return () => clearInterval(chartInterval);
   }, [user, loading]);
 

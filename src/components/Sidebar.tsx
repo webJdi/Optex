@@ -122,71 +122,7 @@ export default function Sidebar() {
                   <BuildIcon /> <Typography fontSize={'0.9em'} sx={{fontFamily: `'Montserrat', sans-serif`}}>Model Builder</Typography>
                 </Button>
             </ListItem>
-
-            <ListItem sx={{ position: 'relative' }}>
-                <Button 
-                  //onClick={() => handleNavigation('/simulation')}
-                  sx={{ color: router.pathname === '/simulation' ? accent : textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none',
-                    '&:hover': {
-                      backgroundColor: router.pathname === '/simulation' ? accent : 'rgba(0, 230, 254, 0.1)',
-                      color: router.pathname === '/simulation' ? textColor2 : accent,
-                    }
-                  }}
-                >
-                  <VideogameAssetIcon /> <Typography fontSize={'0.9em'} sx={{fontFamily: `'Montserrat', sans-serif`}}>Simulation</Typography>
-                </Button>
-                {/* Coming Soon Flag */}
-                <Box sx={{
-                  position: 'absolute',
-                  bottom: 0,
-                  right: 0,
-                  backgroundColor: '#ff6b35',
-                  color: 'white',
-                  fontSize: '8px',
-                  fontWeight: 'bold',
-                  padding: '2px 6px',
-                  borderRadius: '6px 0 0 0',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-                  zIndex: 10,
-                  fontFamily: `'Montserrat', sans-serif`,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px'
-                }}>
-                  Soon
-                </Box>
-            </ListItem>
-            <ListItem sx={{ position: 'relative' }}>
-                <Button 
-                  //onClick={() => handleNavigation('/copilot')}
-                  sx={{ color: router.pathname === '/copilot' ? accent : textColor, width:'100%', p: 1, display: 'flex', justifyContent:'space-around', textTransform: 'none',
-                    '&:hover': {
-                      backgroundColor: router.pathname === '/copilot' ? accent : 'rgba(0, 230, 254, 0.1)',
-                      color: router.pathname === '/copilot' ? textColor2 : accent,
-                    }
-                  }}
-                >
-                  <SmartToyIcon /> <Typography fontSize={'0.9em'} sx={{fontFamily: `'Montserrat', sans-serif`}}>Co-Pilot</Typography>
-                </Button>
-                {/* Coming Soon Flag */}
-                <Box sx={{
-                  position: 'absolute',
-                  bottom: 0,
-                  right: 0,
-                  backgroundColor: '#ff6b35',
-                  color: 'white',
-                  fontSize: '8px',
-                  fontWeight: 'bold',
-                  padding: '2px 6px',
-                  borderRadius: '6px 0 0 0',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
-                  zIndex: 10,
-                  fontFamily: `'Montserrat', sans-serif`,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px'
-                }}>
-                  Soon
-                </Box>
-            </ListItem>
+            
       </List>
     </Box>
   );

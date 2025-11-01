@@ -25,11 +25,17 @@ export interface RawMillModel {
 
 export interface KilnModel {
   burning_zone_temp_c: number;
+  kiln_inlet_temp_c: number;
   trad_fuel_rate_kg_hr: number;
   alt_fuel_rate_kg_hr: number;
+  raw_meal_feed_rate_tph: number;
+  limestone_to_clay_ratio: number;
   kiln_speed_rpm: number;
   kiln_motor_torque_pct: number;
-  o2_level_pct: number;
+  id_fan_speed_pct: number;
+  id_fan_power_kw: number;
+  kiln_inlet_o2_pct: number;
+  kiln_outlet_o2_pct: number;
 }
 
 export interface ProductionModel {
@@ -47,6 +53,13 @@ export interface PlantReading {
 
 export async function historizePlantReading(reading: PlantReading) {
   try {
+    // Debug: Log what we're about to save
+    console.log('📊 Historizing plant reading:', {
+      timestamp: reading.timestamp,
+      burning_zone_temp: reading.kiln.burning_zone_temp_c,
+      trad_fuel_rate: reading.kiln.trad_fuel_rate_kg_hr,
+    });
+    
     const docRef = doc(db, "plant_readings", String(reading.timestamp));
     await setDoc(docRef, {
       timestamp: Timestamp.fromMillis(reading.timestamp * 1000),
@@ -55,6 +68,8 @@ export async function historizePlantReading(reading: PlantReading) {
       kiln: reading.kiln,
       production: reading.production,
     });
+    
+    console.log('✅ Successfully saved to Firebase with doc ID:', reading.timestamp);
   } catch (e) {
     console.error("Error adding reading to Firestore", e);
   }

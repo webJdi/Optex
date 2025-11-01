@@ -8,7 +8,7 @@ import Sidebar from '../components/Sidebar';
 import PageHeader from '../components/PageHeader';
 import { accent, cardBg, textColor, textColor2, textColor3, gradientBg, glowBg1, glowBg2, glowBg3, glowBg4, shadowDrop, col1, col2, col3, col4, glowCol1, glowCol2, glowCol3, glowCol4 } from '../components/ColorPalette';
 import { updateApcLimits } from '../services/firebase';
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, doc, setDoc, deleteDoc, onSnapshot, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 
 
@@ -143,12 +143,171 @@ export default function SoftSensors() {
   const [reading, setReading] = useState<PlantReading | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  
+  // Track violations from Firebase (variable name -> violation data)
+  const [violations, setViolations] = useState<Map<string, {startTime: number, lastNotified: number}>>(new Map());
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
 
   // Body margin effect
   useEffect(() => {
     document.body.style.margin = '0';
     return () => { document.body.style.margin = ''; };
   }, []);
+
+  // Request notification permission on component mount
+  useEffect(() => {
+    if ('Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+          setNotificationPermission(permission);
+        });
+      } else {
+        setNotificationPermission(Notification.permission);
+      }
+    }
+  }, []);
+
+  // Listen to Firebase for active violations
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribe = onSnapshot(collection(db, 'apc_violations'), (snapshot: any) => {
+      const violationsMap = new Map<string, {startTime: number, lastNotified: number}>();
+      
+      snapshot.forEach((doc: any) => {
+        const data = doc.data();
+        violationsMap.set(doc.id, {
+          startTime: data.startTime?.toMillis() || Date.now(),
+          lastNotified: data.lastNotified?.toMillis() || 0,
+        });
+      });
+      
+      setViolations(violationsMap);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Store violation in Firebase
+  const storeViolation = async (variableName: string, variable: Variable) => {
+    try {
+      const violationRef = doc(db, 'apc_violations', variableName);
+      await setDoc(violationRef, {
+        variableName,
+        pv: variable.pv,
+        ll: variable.ll,
+        hl: variable.hl,
+        violationType: variable.pv <= variable.ll ? 'LOW' : 'HIGH',
+        startTime: Timestamp.now(),
+        lastNotified: Timestamp.fromMillis(0),
+      });
+    } catch (e) {
+      console.error('Error storing violation:', e);
+    }
+  };
+
+  // Clear violation from Firebase
+  const clearViolation = async (variableName: string) => {
+    try {
+      const violationRef = doc(db, 'apc_violations', variableName);
+      await deleteDoc(violationRef);
+    } catch (e) {
+      console.error('Error clearing violation:', e);
+    }
+  };
+
+  // Update last notified time in Firebase
+  const updateLastNotified = async (variableName: string) => {
+    try {
+      const violationRef = doc(db, 'apc_violations', variableName);
+      await setDoc(violationRef, {
+        lastNotified: Timestamp.now(),
+      }, { merge: true });
+    } catch (e) {
+      console.error('Error updating notification time:', e);
+    }
+  };
+
+  // Check for violations and send notifications
+  useEffect(() => {
+    if (!manipulatedVars.length && !controlledVars.length) return;
+    if (notificationPermission !== 'granted') return;
+
+    const checkAndNotify = async () => {
+      const allVariables = [...manipulatedVars, ...controlledVars];
+      const currentTime = Date.now();
+      const VIOLATION_THRESHOLD = 5 * 60 * 1000; // 5 minutes in milliseconds
+      const NOTIFICATION_INTERVAL = 5 * 60 * 1000; // Send notification every 5 minutes
+
+      for (const variable of allVariables) {
+        const violating = variable.pv <= variable.ll || variable.pv >= variable.hl;
+        const existingViolation = violations.get(variable.name);
+
+        if (violating) {
+          if (!existingViolation) {
+            // New violation detected - store in Firebase
+            await storeViolation(variable.name, variable);
+          } else {
+            // Existing violation - check if we should send notification
+            const violationDuration = currentTime - existingViolation.startTime;
+            const timeSinceLastNotification = currentTime - existingViolation.lastNotified;
+
+            if (violationDuration >= VIOLATION_THRESHOLD) {
+              // Violation has lasted >5 minutes
+              if (existingViolation.lastNotified === 0 || timeSinceLastNotification >= NOTIFICATION_INTERVAL) {
+                // Send notification (first time or after 5 minutes)
+                sendLimitViolationNotification(variable);
+                await updateLastNotified(variable.name);
+              }
+            }
+          }
+        } else if (existingViolation) {
+          // Violation resolved - clear from Firebase
+          await clearViolation(variable.name);
+        }
+      }
+    };
+
+    checkAndNotify();
+  }, [manipulatedVars, controlledVars, violations, notificationPermission]);
+
+  // Function to send desktop notification
+  const sendLimitViolationNotification = (variable: Variable) => {
+    if (notificationPermission !== 'granted') return;
+
+    const violationType = variable.pv <= variable.ll ? 'LOW' : 'HIGH';
+    const limitValue = variable.pv <= variable.ll ? variable.ll : variable.hl;
+    
+    const notification = new Notification('⚠️ APC Limit Violation', {
+      body: `${variable.name}: ${variable.pv.toFixed(2)} has been ${violationType} (limit: ${limitValue}) for over 5 minutes!`,
+      icon: '/favicon.ico',
+      badge: '/favicon.ico',
+      tag: variable.name, // Prevent duplicate notifications
+      requireInteraction: true, // Keep notification until user interacts
+    });
+
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+
+    // Auto-close after 30 seconds
+    setTimeout(() => {
+      notification.close();
+    }, 30000);
+  };
+
+  // Helper function to check if variable is violating limits
+  const isViolating = (variable: Variable): boolean => {
+    return variable.pv <= variable.ll || variable.pv >= variable.hl;
+  };
+
+  // Helper function to get violation duration
+  const getViolationDuration = (variableName: string): number => {
+    const violation = violations.get(variableName);
+    if (!violation) return 0;
+    return Math.floor((Date.now() - violation.startTime) / 1000); // in seconds
+  };
 
   // Fetch plant reading and limits from Firestore
   useEffect(() => {
@@ -350,21 +509,35 @@ export default function SoftSensors() {
                 <Typography sx={{ color: textColor, width: 80, fontSize: 14, opacity: 0.7, textAlign: 'center' }}>LL</Typography>
                 <Typography sx={{ color: textColor, width: 80, fontSize: 14, opacity: 0.7, textAlign: 'center' }}>HL</Typography>
               </Box>
-              {manipulatedVars.map((row: Variable, idx: number) => (
+              {manipulatedVars.map((row: Variable, idx: number) => {
+                const violating = isViolating(row);
+                const duration = getViolationDuration(row.name);
+                
+                return (
                 <Box key={idx} sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 2 }}>
-                  <Typography sx={{ color: textColor, width: 250, fontSize: 14 }}>{row.name}</Typography>
+                  <Typography sx={{ color: textColor, width: 250, fontSize: 14 }}>
+                    {row.name}
+                    {violating && duration > 0 && (
+                      <Typography component="span" sx={{ color: '#ff6b6b', fontSize: 11, ml: 1 }}>
+                        ({Math.floor(duration / 60)}:{(duration % 60).toString().padStart(2, '0')})
+                      </Typography>
+                    )}
+                  </Typography>
                   <Box
                     sx={{
                       width: 80,
                       height: 50,
-                      
+                      background: violating 
+                        ? (duration >= 300 ? 'linear-gradient(135deg, #ff4757 0%, #c23616 100%)' : 'linear-gradient(135deg, #ffa502 0%, #ff6348 100%)')
+                        : 'transparent',
                       borderRadius: 2,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: textColor,
+                      color: violating ? '#fff' : textColor,
                       fontSize: 16,
                       fontWeight: 500,
+                      animation: duration >= 300 ? 'pulse 2s infinite' : 'none',
                     }}
                   >
                     {row.name === 'Limestone to Clay Ratio' ? row.pv.toFixed(2) : row.pv.toFixed(0)}
@@ -441,7 +614,8 @@ export default function SoftSensors() {
                     </Box>
                   </Box>
                 </Box>
-              ))}
+                );
+              })}
             </Box>
             <Box sx={{ flex: 1 }}>
               <Typography variant="h6" sx={{ color: textColor, fontWeight: 600, mb: 3 }}>
@@ -453,22 +627,35 @@ export default function SoftSensors() {
                 <Typography sx={{ color: textColor, width: 80, fontSize: 14, opacity: 0.7, textAlign: 'center' }}>LL</Typography>
                 <Typography sx={{ color: textColor, width: 80, fontSize: 14, opacity: 0.7, textAlign: 'center' }}>HL</Typography>
               </Box>
-              {controlledVars.map((row: Variable, idx: number) => (
+              {controlledVars.map((row: Variable, idx: number) => {
+                const violating = isViolating(row);
+                const duration = getViolationDuration(row.name);
+                
+                return (
                 <Box key={idx} sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 2 }}>
-                  <Typography sx={{ color: textColor, width: 250, fontSize: 14 }}>{row.name}</Typography>
+                  <Typography sx={{ color: textColor, width: 250, fontSize: 14 }}>
+                    {row.name}
+                    {violating && duration > 0 && (
+                      <Typography component="span" sx={{ color: '#ff6b6b', fontSize: 11, ml: 1 }}>
+                        ({Math.floor(duration / 60)}:{(duration % 60).toString().padStart(2, '0')})
+                      </Typography>
+                    )}
+                  </Typography>
                   <Box
                     sx={{
                       width: 80,
                       height: 50,
-                      
+                      background: violating 
+                        ? (duration >= 300 ? 'linear-gradient(135deg, #ff4757 0%, #c23616 100%)' : 'linear-gradient(135deg, #ffa502 0%, #ff6348 100%)')
+                        : 'transparent',
                       borderRadius: 2,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      color: textColor,
+                      color: violating ? '#fff' : textColor,
                       fontSize: 16,
                       fontWeight: 500,
-                      
+                      animation: duration >= 300 ? 'pulse 2s infinite' : 'none',
                     }}
                   >
                     {row.pv.toFixed(0)}
@@ -545,11 +732,24 @@ export default function SoftSensors() {
                       </Box>
                   </Box>
                 </Box>
-              ))}
+                );
+              })}
             </Box>
           </Box>
         </Box>
       </Box>
+
+      {/* Add keyframes for pulse animation */}
+      <style jsx>{`
+        @keyframes pulse {
+          0%, 100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.7;
+          }
+        }
+      `}</style>
 
       {/* Modal for updating values */}
       <Dialog open={open} onClose={handleCloseModal}>

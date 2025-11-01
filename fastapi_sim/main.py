@@ -509,14 +509,19 @@ class PlantSimulator:
         # --- 3. Pyroprocessing Simulation (using actual controlled values) ---
         # Use actual controlled values with realistic disturbances
         # Add fuel flow disturbances (pressure variations, fuel quality variations)
-        trad_fuel_disturbance = np.random.normal(0, 30) + np.sin(self.tick / 150) * 20  # ±50 kg/hr variation
-        alt_fuel_disturbance = np.random.normal(0, 15) + np.sin(self.tick / 180) * 10   # ±25 kg/hr variation
+        # Increased disturbances for better visibility
+        trad_fuel_disturbance = np.random.normal(0, 40) + np.sin(self.tick / 100) * 30  # ±70 kg/hr variation
+        alt_fuel_disturbance = np.random.normal(0, 20) + np.sin(self.tick / 120) * 15   # ±35 kg/hr variation
         
         trad_fuel_rate_kg_hr = self.actual_values['trad_fuel_rate_kg_hr'] + trad_fuel_disturbance
         trad_fuel_rate_kg_hr = np.clip(trad_fuel_rate_kg_hr, 900, 1800)  # Keep within safe limits
         
         alt_fuel_rate_kg_hr = self.actual_values['alt_fuel_rate_kg_hr'] + alt_fuel_disturbance
         alt_fuel_rate_kg_hr = np.clip(alt_fuel_rate_kg_hr, 100, 1000)
+        
+        # Log disturbances every 10 ticks for debugging
+        if self.tick % 10 == 0:
+            print(f"🔥 Tick {self.tick}: Trad Fuel: {self.actual_values['trad_fuel_rate_kg_hr']:.0f} → {trad_fuel_rate_kg_hr:.0f} (Δ{trad_fuel_disturbance:+.0f})")
         
         raw_meal_feed_rate_tph = self.actual_values['raw_meal_feed_rate_tph']
         kiln_speed_rpm = self.actual_values['kiln_speed_rpm']
@@ -529,13 +534,19 @@ class PlantSimulator:
         tsr_pct = (alt_fuel_rate_kg_hr * 4500) / total_energy_kcal_hr * 100 if total_energy_kcal_hr > 0 else 25
         
         # Burning zone temperature - influenced by fuel rates and heat transfer
-        # More sensitive to fuel fluctuations with additional thermal inertia effects
-        fuel_heat_effect = (base_shc - 740) * 2  # Base heat effect
-        thermal_disturbance = np.random.normal(0, 8)  # Increased temperature noise
-        thermal_lag = np.sin(self.tick / 100) * 5  # Thermal inertia oscillation
+        # Use fuel deviation from setpoint instead of SHC (more realistic)
+        fuel_deviation = (trad_fuel_rate_kg_hr - 1200) + (alt_fuel_rate_kg_hr - 400) * 0.5  # Combined fuel effect
+        fuel_heat_effect = fuel_deviation * 0.15  # Temperature increases ~0.15°C per kg/hr fuel increase
+        thermal_disturbance = np.random.normal(0, 12)  # Increased temperature noise for visibility
+        thermal_lag = np.sin(self.tick / 80) * 8  # Thermal inertia oscillation (faster cycle, larger amplitude)
         
         burning_zone_temp_c = 1450 + fuel_heat_effect + thermal_disturbance + thermal_lag
         burning_zone_temp_c = np.clip(burning_zone_temp_c, 1400, 1500)
+        
+        # Log temperature fluctuations every 10 ticks
+        if self.tick % 10 == 0:
+            print(f"🌡️  Tick {self.tick}: Burning Zone Temp: {burning_zone_temp_c:.1f}°C (Base: 1450 + Fuel Effect: {fuel_heat_effect:+.1f} + Noise: {thermal_disturbance:+.1f} + Lag: {thermal_lag:+.1f})")
+            print(f"    SHC: {base_shc:.1f} kcal/kg | Trad Fuel: {trad_fuel_rate_kg_hr:.0f} kg/hr | Alt Fuel: {alt_fuel_rate_kg_hr:.0f} kg/hr")
         
         # Kiln motor torque - related to material load and kiln speed
         material_load_factor = clinker_production_rate_kg_hr / 100000
@@ -1240,7 +1251,7 @@ async def optimize_with_limits(
             direction='maximize',
             sampler=optuna.samplers.TPESampler(n_startup_trials=20, n_ei_candidates=30)
         )
-        study.optimize(objective, n_trials=500, show_progress_bar=False)
+        study.optimize(objective, n_trials=100, show_progress_bar=False)
         
         best_params = study.best_params
         
