@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: optex-backend
+    runtime: python
+    plan: free
+    buildCommand: pip install -r fastapi_sim/requirements.txt
+    startCommand: cd fastapi_sim && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11
