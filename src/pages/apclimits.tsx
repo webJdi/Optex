@@ -33,6 +33,21 @@ function getNestedValue(obj: PlantReading | Record<string, unknown>, path: strin
   }
 }
 
+// Helper function to calculate limestone to clay ratio from plant reading
+function calculateLimestoneToClayRatio(reading: PlantReading): number {
+  try {
+    const limestonePct = getNestedValue(reading, 'raw_mill.limestone_feeder_pct');
+    const clayPct = getNestedValue(reading, 'raw_mill.clay_feeder_pct');
+    
+    if (clayPct > 0) {
+      return limestonePct / clayPct;
+    }
+    return 0;
+  } catch {
+    return 0;
+  }
+}
+
 const fetchLimitsFromFirebase = async () => {
   const querySnapshot = await getDocs(collection(db, 'apclimits'));
   const mvLimits: Variable[] = [];
@@ -129,10 +144,20 @@ export default function SoftSensors() {
           setReading(readingData);
           
           // Update PV values immediately
-          const updatedMvLimits = limitsData.mvLimits.map(variable => ({
-            ...variable,
-            pv: variable.mappingKey ? getNestedValue(readingData, variable.mappingKey) : 0
-          }));
+          const updatedMvLimits = limitsData.mvLimits.map(variable => {
+            // Special handling for Limestone to Clay Ratio - calculate from raw mill data
+            if (variable.name === 'Limestone to Clay Ratio') {
+              return {
+                ...variable,
+                pv: calculateLimestoneToClayRatio(readingData)
+              };
+            }
+            // For other variables, use the mapping key
+            return {
+              ...variable,
+              pv: variable.mappingKey ? getNestedValue(readingData, variable.mappingKey) : 0
+            };
+          });
           
           const updatedCvLimits = limitsData.cvLimits.map(variable => ({
             ...variable,
@@ -300,7 +325,7 @@ export default function SoftSensors() {
                       fontWeight: 500,
                     }}
                   >
-                    {row.pv.toFixed(0)}
+                    {row.name === 'Limestone to Clay Ratio' ? row.pv.toFixed(2) : row.pv.toFixed(0)}
                   </Box>
                   <Box
                   sx={{

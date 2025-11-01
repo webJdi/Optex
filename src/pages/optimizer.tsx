@@ -104,6 +104,7 @@ export default function Optimizer() {
         trad_fuel: vars.trad_fuel_rate_kg_hr || null,
         alt_fuel: vars.alt_fuel_rate_kg_hr || null,
         raw_meal: vars.raw_meal_feed_rate_tph || null,
+        feed_ratio: vars.limestone_to_clay_ratio || null,
         kiln_speed: vars.kiln_speed_rpm || null,
         fan_speed: vars.id_fan_speed_pct || null,
       };
@@ -122,6 +123,7 @@ export default function Optimizer() {
         temp: constraints.burning_zone_temp_c || null,
         o2: constraints.kiln_inlet_o2_pct || null,
         fan_power: constraints.id_fan_power_kw || null,
+        lsf: constraints.lsf_predicted || null,
         benefit: trial.economic_value || null,
       };
     });
@@ -375,11 +377,13 @@ export default function Optimizer() {
         { label: 'Burning Zone Temp (°C)', value: 'burning_zone_temp_c' },
         { label: 'Kiln Inlet O₂ (%)', value: 'kiln_inlet_o2_pct' },
         { label: 'ID Fan Power (kW)', value: 'id_fan_power_kw' },
+        { label: 'LSF (Soft Sensor)', value: 'lsf_predicted' },
       ],
       optimization: [
         { label: 'Traditional Fuel Rate (kg/hr)', value: 'trad_fuel_rate_kg_hr' },
         { label: 'Alternative Fuel Rate (kg/hr)', value: 'alt_fuel_rate_kg_hr' },
         { label: 'Raw Meal Feed Rate (t/h)', value: 'raw_meal_feed_rate_tph' },
+        { label: 'Limestone to Clay Ratio', value: 'limestone_to_clay_ratio' },
         { label: 'Kiln Speed (RPM)', value: 'kiln_speed_rpm' },
         { label: 'ID Fan Speed (%)', value: 'id_fan_speed_pct' },
       ]
@@ -919,6 +923,7 @@ export default function Optimizer() {
                         <Line yAxisId="left" type="monotone" dataKey="trad_fuel" stroke={col1} strokeWidth={1.5} dot={false} name="Trad Fuel (kg/hr)" connectNulls hide={hiddenOptimizationLines['trad_fuel']} isAnimationActive={false} />
                         <Line yAxisId="left" type="monotone" dataKey="alt_fuel" stroke={col2} strokeWidth={1.5} dot={false} name="Alt Fuel (kg/hr)" connectNulls hide={hiddenOptimizationLines['alt_fuel']} isAnimationActive={false} />
                         <Line yAxisId="left" type="monotone" dataKey="raw_meal" stroke={col3} strokeWidth={1.5} dot={false} name="Raw Meal (tph)" connectNulls hide={hiddenOptimizationLines['raw_meal']} isAnimationActive={false} />
+                        <Line yAxisId="right" type="monotone" dataKey="feed_ratio" stroke="#9c27b0" strokeWidth={1.5} dot={false} name="Feed Ratio" connectNulls hide={hiddenOptimizationLines['feed_ratio']} isAnimationActive={false} />
                         <Line yAxisId="right" type="monotone" dataKey="kiln_speed" stroke={col4} strokeWidth={1.5} dot={false} name="Kiln Speed (rpm)" connectNulls hide={hiddenOptimizationLines['kiln_speed']} isAnimationActive={false} />
                         <Line yAxisId="left" type="monotone" dataKey="fan_speed" stroke={accent} strokeWidth={1.5} dot={false} name="Fan Speed (%)" connectNulls hide={hiddenOptimizationLines['fan_speed']} isAnimationActive={false} />
                       </LineChart>
@@ -1004,6 +1009,7 @@ export default function Optimizer() {
                         <Line yAxisId="left" type="monotone" dataKey="temp" stroke={col2} strokeWidth={1.5} dot={false} name="Temp (°C)" connectNulls hide={hiddenConstraintLines['temp']} isAnimationActive={false} />
                         <Line yAxisId="left" type="monotone" dataKey="o2" stroke={col3} strokeWidth={1.5} dot={false} name="O₂ (%)" connectNulls hide={hiddenConstraintLines['o2']} isAnimationActive={false} />
                         <Line yAxisId="left" type="monotone" dataKey="fan_power" stroke={col4} strokeWidth={1.5} dot={false} name="Fan Power (kW)" connectNulls hide={hiddenConstraintLines['fan_power']} isAnimationActive={false} />
+                        <Line yAxisId="left" type="monotone" dataKey="lsf" stroke="#ff9800" strokeWidth={1.5} dot={false} name="LSF" connectNulls hide={hiddenConstraintLines['lsf']} isAnimationActive={false} />
                         <Line yAxisId="right" type="monotone" dataKey="benefit" stroke="#4caf50" strokeWidth={2} dot={false} name="Benefit ($/hr)" connectNulls hide={hiddenConstraintLines['benefit']} isAnimationActive={false} />
                       </LineChart>
                     </ResponsiveContainer>

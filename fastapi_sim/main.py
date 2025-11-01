@@ -213,6 +213,46 @@ class CementProcessModel:
             'tsr_pct': max(0, min(50, tsr_pct))
         }
 
+# ML-based soft sensor for LSF prediction
+def predict_lsf_from_features(limestone_pct, clay_pct, mill_power, mill_vibration):
+    """
+    Predict LSF using the trained soft sensor model
+    
+    Args:
+        limestone_pct: Limestone feeder percentage
+        clay_pct: Clay feeder percentage  
+        mill_power: Mill power consumption (kWh/ton)
+        mill_vibration: Mill vibration (mm/s)
+    
+    Returns:
+        Predicted LSF value
+    """
+    if ml_models['lsf'] is None:
+        print("⚠ LSF model not loaded, using calculated estimate")
+        # Fallback calculation based on limestone content
+        base_lsf = 95 + (limestone_pct - 75) * 0.3
+        return max(95, min(105, base_lsf))
+    
+    try:
+        # Prepare features for LSF model
+        features_lsf = pd.DataFrame([{
+            'limestone_feeder_pct': limestone_pct,
+            'clay_feeder_pct': clay_pct,
+            'mill_power_kwh_ton': mill_power,
+            'mill_vibration_mm_s': mill_vibration
+        }])
+        
+        # Predict LSF
+        lsf_pred = ml_models['lsf'].predict(features_lsf)[0]
+        print(f"✓ LSF Soft Sensor Prediction: {lsf_pred:.2f} (limestone: {limestone_pct:.1f}%, clay: {clay_pct:.1f}%)")
+        return float(lsf_pred)
+        
+    except Exception as e:
+        print(f"✗ LSF prediction error: {e}")
+        # Fallback calculation
+        base_lsf = 95 + (limestone_pct - 75) * 0.3
+        return max(95, min(105, base_lsf))
+
 # ML-based relationship learning
 class MLRelationshipModel:
     def __init__(self):
@@ -322,8 +362,14 @@ class HybridProcessModel:
             print(f"✓ ML model updated with {len(plant_history)} data points")
         return success
         
-    def predict_constraint_responses(self, optimization_vars, current_constraints):
-        """Hybrid prediction combining first principles and ML"""
+    def predict_constraint_responses(self, optimization_vars, current_constraints, current_mill_state=None):
+        """Hybrid prediction combining first principles and ML, now including LSF soft sensor
+        
+        Args:
+            optimization_vars: Dict with optimization variables including raw_meal_feed_rate_tph and limestone_to_clay_ratio
+            current_constraints: Current constraint variable values
+            current_mill_state: Dict with current mill_power_kwh_ton and mill_vibration_mm_s from plant
+        """
         
         # Get first-principles predictions
         fp_predictions = self.first_principles.calculate_constraint_responses(
@@ -336,19 +382,62 @@ class HybridProcessModel:
         if ml_predictions is None:
             # Use pure first principles if ML not trained
             print("Using first-principles only (ML not trained)")
-            return fp_predictions
+            hybrid_predictions = fp_predictions
+        else:
+            # Hybrid approach: weighted combination
+            hybrid_predictions = {}
+            for var in fp_predictions:
+                fp_value = fp_predictions[var]
+                ml_value = ml_predictions[var]
+                
+                # Weighted average
+                hybrid_value = (1 - self.ml_weight) * fp_value + self.ml_weight * ml_value
+                hybrid_predictions[var] = hybrid_value
+                
+            print(f"Using hybrid model (FP: {1-self.ml_weight:.1f}, ML: {self.ml_weight:.1f})")
         
-        # Hybrid approach: weighted combination
-        hybrid_predictions = {}
-        for var in fp_predictions:
-            fp_value = fp_predictions[var]
-            ml_value = ml_predictions[var]
+        # Add LSF prediction using soft sensor with actual mill parameters
+        # Extract optimization variables
+        feed_rate = optimization_vars.get('raw_meal_feed_rate_tph', 150)
+        limestone_to_clay_ratio = optimization_vars.get('limestone_to_clay_ratio', 4.0)  # New MV!
+        
+        # Calculate limestone and clay percentages from feed_rate and ratio
+        # limestone_to_clay_ratio = limestone_pct / clay_pct
+        # limestone_pct + clay_pct + minor_components = 100
+        # Assuming minor components = 5%
+        minor_components = 5.0
+        remaining = 100.0 - minor_components
+        
+        # limestone_pct = ratio * clay_pct
+        # ratio * clay_pct + clay_pct = remaining
+        # clay_pct * (ratio + 1) = remaining
+        clay_pct = remaining / (limestone_to_clay_ratio + 1)
+        limestone_pct = limestone_to_clay_ratio * clay_pct
+        
+        # Use actual mill parameters from current plant state if available
+        if current_mill_state:
+            mill_power = current_mill_state.get('mill_power_kwh_ton', 15.0)
+            mill_vibration = current_mill_state.get('mill_vibration_mm_s', 4.0)
+            print(f"✓ Using actual mill parameters: Power={mill_power:.2f} kWh/ton, Vibration={mill_vibration:.2f} mm/s")
+        else:
+            # Estimate mill power based on feed rate (fallback)
+            mill_power = 15.0 + (feed_rate / 10)  # kWh/ton estimate
+            mill_vibration = 3.5 + (feed_rate - 150) * 0.02
+            print(f"⚠ Estimating mill parameters: Power={mill_power:.2f} kWh/ton, Vibration={mill_vibration:.2f} mm/s")
+        
+        # Use soft sensor to predict LSF
+        predicted_lsf = predict_lsf_from_features(
+            limestone_pct=limestone_pct,
+            clay_pct=clay_pct,
+            mill_power=mill_power,
+            mill_vibration=mill_vibration
+        )
+        
+        print(f"✓ Feed Ratio: {limestone_to_clay_ratio:.2f} → Limestone: {limestone_pct:.1f}%, Clay: {clay_pct:.1f}% → LSF: {predicted_lsf:.2f}")
+        
+        # Add LSF to hybrid predictions
+        hybrid_predictions['lsf_predicted'] = predicted_lsf
             
-            # Weighted average
-            hybrid_value = (1 - self.ml_weight) * fp_value + self.ml_weight * ml_value
-            hybrid_predictions[var] = hybrid_value
-            
-        print(f"Using hybrid model (FP: {1-self.ml_weight:.1f}, ML: {self.ml_weight:.1f})")
         return hybrid_predictions
 
 # Initialize hybrid model
@@ -465,6 +554,9 @@ class PlantSimulator:
         # --- 4. Assemble the Final Data Packet ---
         final_lsf = self.target_lsf + np.random.normal(0, 0.15)
         final_shc = (total_energy_kcal_hr / clinker_production_rate_kg_hr) + np.random.normal(0, 5)
+        
+        # Calculate limestone to clay ratio from raw material percentages
+        limestone_to_clay_ratio = limestone_pct / clay_pct if clay_pct > 0 else 4.0
 
         return {
             "timestamp": int(time.time()),
@@ -489,6 +581,7 @@ class PlantSimulator:
                 "trad_fuel_rate_kg_hr": round(trad_fuel_rate_kg_hr, 0),
                 "alt_fuel_rate_kg_hr": round(alt_fuel_rate_kg_hr, 0),
                 "raw_meal_feed_rate_tph": round(raw_meal_feed_rate_tph, 1),
+                "limestone_to_clay_ratio": round(limestone_to_clay_ratio, 2),
                 "kiln_speed_rpm": round(kiln_speed_rpm, 2),
                 "kiln_motor_torque_pct": round(kiln_motor_torque_pct, 1),
                 "id_fan_speed_pct": round(id_fan_speed_pct, 1),
@@ -874,10 +967,10 @@ OPTIMIZER_VARIABLES = {
     },
     'Clinkerization': {
         'constraints': [
-            'kiln_motor_torque_pct', 'burning_zone_temp_c', 'kiln_inlet_o2_pct', 'id_fan_power_kw'
+            'kiln_motor_torque_pct', 'burning_zone_temp_c', 'kiln_inlet_o2_pct', 'id_fan_power_kw', 'lsf_predicted'
         ],
         'optimization': [
-            'trad_fuel_rate_kg_hr', 'alt_fuel_rate_kg_hr', 'raw_meal_feed_rate_tph', 'kiln_speed_rpm', 'id_fan_speed_pct'
+            'trad_fuel_rate_kg_hr', 'alt_fuel_rate_kg_hr', 'raw_meal_feed_rate_tph', 'limestone_to_clay_ratio', 'kiln_speed_rpm', 'id_fan_speed_pct'
         ]
     }
 }
@@ -887,12 +980,14 @@ ENGINEERING_LIMITS = {
     'trad_fuel_rate_kg_hr': (900, 1800),
     'alt_fuel_rate_kg_hr': (100, 1000),
     'raw_meal_feed_rate_tph': (100, 220),
+    'limestone_to_clay_ratio': (3.0, 5.0),  # Typical limestone to clay ratio for cement raw mix
     'kiln_speed_rpm': (2.0, 5.5),
     'id_fan_speed_pct': (60, 95),
     'burning_zone_temp_c': (1400, 1500),
     'kiln_motor_torque_pct': (45, 85),
     'kiln_inlet_o2_pct': (2.0, 6.0),
-    'id_fan_power_kw': (100, 300)
+    'id_fan_power_kw': (100, 300),
+    'lsf_predicted': (97.0, 99.0)  # LSF target range for optimal clinker quality
 }
 
 async def fetch_apc_limits_from_firebase():
@@ -1023,6 +1118,13 @@ async def optimize_with_limits(
             'id_fan_power_kw': current_state['kiln']['id_fan_power_kw']
         }
         
+        # Get current mill state for LSF calculation
+        current_mill_state = {
+            'mill_power_kwh_ton': current_state['raw_mill']['mill_power_kwh_ton'],
+            'mill_vibration_mm_s': current_state['raw_mill']['mill_vibration_mm_s']
+        }
+        print(f"✓ Current mill state: Power={current_mill_state['mill_power_kwh_ton']:.2f} kWh/ton, Vibration={current_mill_state['mill_vibration_mm_s']:.2f} mm/s")
+        
         variables = OPTIMIZER_VARIABLES[segment]
         
         # Convert constraint ranges to dict for easy lookup
@@ -1073,8 +1175,9 @@ async def optimize_with_limits(
             predicted_constraints = {}
             
             if segment == 'Clinkerization':
+                # Pass current mill state for accurate LSF prediction
                 predicted_constraints = hybrid_model.predict_constraint_responses(
-                    optimization_vars, current_constraints
+                    optimization_vars, current_constraints, current_mill_state
                 )
                 
                 # Check constraints against specified limits
@@ -1134,8 +1237,9 @@ async def optimize_with_limits(
         constraint_violations = []
         
         if segment == 'Clinkerization':
+            # Pass current mill state for final constraint calculation
             final_constraints = hybrid_model.predict_constraint_responses(
-                best_params, current_constraints
+                best_params, current_constraints, current_mill_state
             )
             best_params.update(final_constraints)
             
