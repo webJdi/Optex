@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextApiRequest, NextApiResponse } from 'next';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { retrieveContext } from '../../services/rag';
 
 // Interface definitions for type safety
@@ -45,13 +45,16 @@ interface RequestBody {
 }
 
 // Initialize Gemini
-let genAI: GoogleGenerativeAI | null = null;
+let ai: GoogleGenAI | null = null;
 
 try {
+  ai = new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY
+  });
   if (process.env.GEMINI_API_KEY) {
-    genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    console.log('✓ Gemini AI initialized with API key');
   } else {
-    console.warn('GEMINI_API_KEY environment variable not set');
+    console.warn('⚠ GEMINI_API_KEY environment variable not set');
   }
 } catch (error) {
   console.error('Failed to initialize Gemini AI:', error);
@@ -225,7 +228,7 @@ async function performDataAnalysis(req: NextApiRequest, res: NextApiResponse, _d
     const contextChunks = await retrieveContext('cement quality data analysis', 2);
     const context = contextChunks.join('\n');
     
-    if (!genAI) {
+    if (!ai) {
       // Provide basic analysis without AI insights
       res.status(200).json({
         message: generateBasicAnalysisMessage(mockAnalysisData),
@@ -235,9 +238,9 @@ async function performDataAnalysis(req: NextApiRequest, res: NextApiResponse, _d
       return;
     }
     
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const insightsPrompt = `
-    As a senior data scientist specializing in cement manufacturing, analyze this dataset:
+    const result = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `As a senior data scientist specializing in cement manufacturing, analyze this dataset:
     
     Dataset: ${mockAnalysisData.shape[0]} rows × ${mockAnalysisData.shape[1]} columns
     Key Variables: cement strength, water ratio, aggregate ratio, curing time, temperature, humidity
@@ -255,11 +258,10 @@ async function performDataAnalysis(req: NextApiRequest, res: NextApiResponse, _d
     4. ML modeling approach for cement quality prediction
     5. Industry-specific considerations
     
-    Be specific and actionable for cement production optimization.
-    `;
+    Be specific and actionable for cement production optimization.`
+    });
 
-    const aiResult = await model.generateContent(insightsPrompt);
-    const insights = await aiResult.response.text();
+    const insights = result.text;
 
     res.status(200).json({
       operation: 'analysis',
@@ -398,7 +400,7 @@ async function performModelTraining(req: NextApiRequest, res: NextApiResponse, d
     const contextChunks = await retrieveContext('cement strength prediction model', 2);
     const context = contextChunks.join('\n');
     
-    if (!genAI) {
+    if (!ai) {
       // Provide basic model training message without AI insights
       res.status(200).json({
         message: generateBasicTrainingMessage(trainingData, algorithm, problemType),
@@ -408,9 +410,9 @@ async function performModelTraining(req: NextApiRequest, res: NextApiResponse, d
       return;
     }
     
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const insightsPrompt = `
-    As a senior ML engineer specializing in cement manufacturing, analyze these model results:
+    const result = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `As a senior ML engineer specializing in cement manufacturing, analyze these model results:
     
     Algorithm: ${algorithm.replace('_', ' ').toUpperCase()}
     Problem: ${problemType} for ${target_column}
@@ -431,11 +433,10 @@ async function performModelTraining(req: NextApiRequest, res: NextApiResponse, d
     4. Recommendations for model improvement
     5. Next steps for deployment in cement plants
     
-    Be specific about cement industry applications.
-    `;
+    Be specific about cement industry applications.`
+    });
 
-    const aiResult = await model.generateContent(insightsPrompt);
-    const insights = await aiResult.response.text();
+    const insights = result.text;
 
     res.status(200).json({
       operation: 'training',
@@ -454,9 +455,9 @@ async function performModelTraining(req: NextApiRequest, res: NextApiResponse, d
 async function handleGeneralQuery(req: NextApiRequest, res: NextApiResponse, query: string) {
   try {
     // If Gemini AI is not available, provide a helpful fallback response
-    if (!genAI) {
+    if (!ai || !process.env.GEMINI_API_KEY) {
       const fallbackResponse = `
-## 🤖 AI Assistant Temporarily Unavailable
+## 🤖 AI Assistant (Basic Mode)
 
 I understand you're asking: "${query}"
 
@@ -473,14 +474,16 @@ I understand you're asking: "${query}"
 - "train a classification model" - Build predictive models
 - "show correlation matrix" - Understand feature relationships
 
+**Note:** For enhanced AI responses, configure GEMINI_API_KEY in your .env.local file.
+
 Please try uploading a dataset first, then I can provide more specific assistance!
 `;
 
-      res.status(200).json({ 
+      return res.status(200).json({ 
         message: fallbackResponse,
-        status: 'completed'
+        status: 'completed',
+        operation: 'query'
       });
-      return;
     }
 
     const { datasetInfo, modelInfo, conversationHistory } = req.body;
@@ -515,9 +518,18 @@ Please try uploading a dataset first, then I can provide more specific assistanc
         ).join('\n');
     }
     
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `
-    You are an expert ML engineer and data scientist specializing in cement manufacturing.
+    if (!ai) {
+      return res.status(200).json({
+        operation: 'query',
+        status: 'completed',
+        message: 'AI service is currently unavailable. Please configure GEMINI_API_KEY.',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    const result = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `You are an expert ML engineer and data scientist specializing in cement manufacturing.
 
     IMPORTANT GUIDELINES:
     1. Be conversational but professional, like a senior data scientist mentoring a colleague
@@ -535,21 +547,49 @@ Please try uploading a dataset first, then I can provide more specific assistanc
     
     User Query: ${query}
     
-    Provide a helpful, professional response with specific ML and cement industry insights.
-    `;
+    Provide a helpful, professional response with specific ML and cement industry insights.`
+    });
     
-    const result = await model.generateContent(prompt);
-    const response = await result.response.text();
+    const response = result.text;
     
-    res.status(200).json({
+    return res.status(200).json({
       operation: 'query',
       status: 'completed',
       message: response,
       timestamp: new Date().toISOString()
     });
   } catch (error) {
+    console.error('General query error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({ error: 'Query failed', details: errorMessage });
+    
+    // Return a friendly error message instead of failing
+    const fallbackMessage = `
+## ⚠️ Unable to Process Query
+
+I encountered an issue processing your request: "${query}"
+
+**Error:** ${errorMessage}
+
+**What you can try:**
+1. 🔄 **Rephrase your question** - Try asking in a different way
+2. 📊 **Use specific commands** - Try "analyze data", "clean data", "train model"
+3. 📁 **Upload a dataset** - This helps me provide more specific guidance
+4. 🔧 **Check configuration** - Ensure GEMINI_API_KEY is set in .env.local
+
+**Need help?** Try these common operations:
+- "analyze my data" - Dataset analysis
+- "show statistics" - Statistical summary
+- "check data quality" - Quality assessment
+
+I'm still learning and improving. Please try again!
+`;
+    
+    return res.status(200).json({ 
+      operation: 'query',
+      status: 'completed',
+      message: fallbackMessage,
+      timestamp: new Date().toISOString()
+    });
   }
 }
 

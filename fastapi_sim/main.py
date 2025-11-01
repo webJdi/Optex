@@ -14,8 +14,32 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 import firebase_admin
 from firebase_admin import credentials, firestore
+import asyncio
+from contextlib import asynccontextmanager
 
-app = FastAPI()
+# Global variable for background task
+background_task = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan - startup and shutdown events"""
+    # Startup: Start the optimizer worker in background
+    global background_task
+    print("\n🚀 Starting application with integrated optimizer worker...")
+    background_task = asyncio.create_task(optimizer_worker_loop())
+    
+    yield  # Application runs here
+    
+    # Shutdown: Cancel the background task
+    print("\n🛑 Shutting down optimizer worker...")
+    if background_task:
+        background_task.cancel()
+        try:
+            await background_task
+        except asyncio.CancelledError:
+            print("✓ Optimizer worker stopped")
+
+app = FastAPI(lifespan=lifespan)
 
 # Allow CORS for local frontend development (your original code, which is correct)
 app.add_middleware(
@@ -32,15 +56,19 @@ try:
     if not firebase_admin._apps:
         import os
         
-        # Try to use service account key file if it exists
-        service_key_path = os.path.join(os.path.dirname(__file__), "serviceAccountKey.json")
+        # Try production path first (Render secret files)
+        service_key_path = "/etc/secrets/serviceAccountKey.json"
+        
+        # Fallback to local development path
+        if not os.path.exists(service_key_path):
+            service_key_path = os.path.join(os.path.dirname(__file__), "serviceAccountKey.json")
         
         if os.path.exists(service_key_path):
             cred = credentials.Certificate(service_key_path)
             firebase_admin.initialize_app(cred)
             print(f"✓ Firebase initialized with service account key: {service_key_path}")
         else:
-            # Use default credentials (works in production environments like Render with env vars)
+            # Use default credentials (works with environment variables)
             firebase_admin.initialize_app(options={
                 'projectId': 'optex-b13d3',
             })
@@ -575,8 +603,16 @@ class PlantSimulator:
         clinker_temp_c = burning_zone_temp_c - 1200 + np.random.normal(0, 10)
         clinker_temp_c = np.clip(clinker_temp_c, 80, 120)
         
-        # --- 4. Assemble the Final Data Packet ---
-        final_lsf = self.target_lsf + np.random.normal(0, 0.15)
+        # --- 4. Calculate LSF using Soft Sensor (instead of simulated value) ---
+        # Use the ML-based soft sensor for LSF prediction
+        predicted_lsf = predict_lsf_from_features(
+            limestone_pct=limestone_pct,
+            clay_pct=clay_pct,
+            mill_power=mill_power_kwh_ton,
+            mill_vibration=mill_vibration_mm_s
+        )
+        
+        # --- 5. Assemble the Final Data Packet ---
         final_shc = (total_energy_kcal_hr / clinker_production_rate_kg_hr) + np.random.normal(0, 5)
         
         # Calculate limestone to clay ratio from raw material percentages
@@ -586,7 +622,7 @@ class PlantSimulator:
             "timestamp": int(time.time()),
             "kpi": {
                 "shc_kcal_kg": round(final_shc, 1),
-                "lsf": round(final_lsf, 2),
+                "lsf": round(predicted_lsf, 2),  # Using soft sensor prediction
                 "sec_kwh_ton": round(sec_kwh_ton, 2),
                 "tsr_pct": round(tsr_pct, 2)
             },
@@ -1548,9 +1584,181 @@ def debug_models():
         "model_types": {k: str(type(v)) if v else None for k, v in ml_models.items()}
     }
 
+# ============================================================
+# INTEGRATED OPTIMIZER WORKER
+# ============================================================
+
+async def run_optimization_internal(segment: str):
+    """
+    Run optimization internally (same process)
+    Returns the optimization result
+    """
+    try:
+        print(f"🔧 Running optimization for {segment} internally...")
+        
+        # Create the request object
+        from pydantic import BaseModel
+        
+        # Call the existing optimize_targets function logic
+        # We'll use a simple HTTP call to localhost to reuse existing logic
+        import httpx
+        
+        backend_url = os.getenv('BACKEND_URL', 'http://localhost:8000')
+        
+        payload = {
+            "segment": segment,
+            "n_data": 50,
+            "use_custom_pricing": False
+        }
+        
+        async with httpx.AsyncClient(timeout=600.0) as client:
+            response = await client.post(
+                f'{backend_url}/optimize_targets',
+                json=payload
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                print(f"✓ Optimization completed for {segment}")
+                
+                # Save to Firebase
+                save_optimization_to_firebase_internal(result, segment)
+                return result
+            else:
+                print(f"✗ Optimization failed with status {response.status_code}")
+                return None
+    except Exception as e:
+        print(f"✗ Error running optimization: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+def save_optimization_to_firebase_internal(result, segment):
+    """Save optimization results to Firebase optimized_targets collection"""
+    try:
+        if not db:
+            print("⚠ Firebase not available, skipping save")
+            return
+        
+        # Convert optimization_history to a simple list if it exists
+        opt_history = result.get('optimization_history', [])
+        if opt_history and isinstance(opt_history, list):
+            opt_history = [
+                {
+                    'trial': item.get('trial', idx + 1),
+                    'economic_value': float(item.get('economic_value', 0)),
+                    'constraint_penalty': float(item.get('constraint_penalty', 0)),
+                    'objective_score': float(item.get('objective_score', 0)),
+                    'optimization_vars': item.get('optimization_vars', {}),
+                    'constraint_vars': item.get('constraint_vars', {})
+                }
+                for idx, item in enumerate(opt_history)
+            ]
+        else:
+            opt_history = []
+        
+        optimization_record = {
+            'timestamp': firestore.SERVER_TIMESTAMP,
+            'segment': segment,
+            'apc_targets': result.get('apc_optimization', {}).get('suggested_targets', {}),
+            'apc_economic_value': result.get('apc_optimization', {}).get('economic_value', 0),
+            'apc_optimization_score': result.get('apc_optimization', {}).get('optimization_score', 0),
+            'engineering_targets': result.get('engineering_optimization', {}).get('suggested_targets', {}),
+            'engineering_economic_value': result.get('engineering_optimization', {}).get('economic_value', 0),
+            'engineering_optimization_score': result.get('engineering_optimization', {}).get('optimization_score', 0),
+            'economic_benefit': (result.get('engineering_optimization', {}).get('economic_value', 0) -
+                                result.get('apc_optimization', {}).get('economic_value', 0)),
+            'pricing_details': result.get('pricing_details', {}),
+            'optimization_history': opt_history
+        }
+        
+        db.collection('optimized_targets').add(optimization_record)
+        print(f"💾 Optimization results saved to Firebase (history: {len(opt_history)} trials)")
+    except Exception as e:
+        print(f"⚠ Error saving to Firebase: {e}")
+
+async def check_and_run_optimization():
+    """
+    Check Firebase for optimization state and run if needed
+    """
+    try:
+        if not db:
+            return
+        
+        # Get current optimizer state
+        state_ref = db.collection('optimizer_state').document('current')
+        state_doc = state_ref.get()
+        
+        if not state_doc.exists:
+            return
+        
+        state = state_doc.to_dict()
+        
+        if not state.get('running') or not state.get('autoSchedule'):
+            return
+        
+        # Calculate elapsed time since last update
+        last_update = state.get('lastUpdateTime')
+        if last_update:
+            current_time = time.time() * 1000  # Convert to milliseconds
+            elapsed = (current_time - last_update) / 1000  # Convert to seconds
+            timer = state.get('timer', 300)
+            
+            # Check if 5 minutes (300 seconds) have passed
+            if elapsed >= timer:
+                segment = state.get('segment', 'Clinkerization')
+                print(f"⏰ Timer expired! Running optimization for {segment}...")
+                
+                # Run optimization
+                result = await run_optimization_internal(segment)
+                
+                if result:
+                    # Reset timer
+                    state_ref.update({
+                        'timer': 300,
+                        'lastUpdateTime': int(time.time() * 1000)
+                    })
+                    print(f"✓ Optimization completed and timer reset")
+    except Exception as e:
+        print(f"✗ Error in optimization check: {e}")
+
+async def optimizer_worker_loop():
+    """Background task that polls for optimization requests every 10 seconds"""
+    print("=" * 60)
+    print("🤖 Integrated Optimizer Worker Started")
+    print("=" * 60)
+    print("👀 Watching for optimization requests...")
+    print("Polling interval: 10 seconds")
+    print()
+    
+    while True:
+        try:
+            await check_and_run_optimization()
+            await asyncio.sleep(10)  # Check every 10 seconds
+        except asyncio.CancelledError:
+            print("🛑 Optimizer worker cancelled")
+            break
+        except Exception as e:
+            print(f"❌ Error in optimizer worker: {e}")
+            await asyncio.sleep(10)  # Wait before retrying
+
+# ============================================================
+# API ENDPOINTS
+# ============================================================
+
 @app.get("/")
 def read_root():
     return {"message": "Cement Plant Live Data Simulator is running"}
+
+@app.get("/health")
+def health_check():
+    """Health check endpoint for deployment monitoring"""
+    return {
+        "status": "healthy",
+        "firebase_connected": db is not None,
+        "simulator_running": True,
+        "timestamp": time.time()
+    }
 
 # Background optimization state
 background_optimization_state = {

@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { NextApiRequest, NextApiResponse } from "next";
 import { retrieveContext } from '../../services/rag';
 import { fetchPlantReading } from '../../services/plantApi';
 
 // Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 
 
@@ -31,17 +31,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } catch (e) {
       plantStateText = 'Current Plant Condition: [Unavailable]';
     }
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const prompt = `
-      You are a helpful assistant. Use the following design/process knowledge and current plant condition to answer the user's question.
+    const result = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `You are a helpful assistant. Use the following design/process knowledge and current plant condition to answer the user's question.
       ${plantStateText}
       Context:\n${context}\n
       Question:
-      ${query}
-    `;
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+      ${query}`
+    });
+    const text = result.text;
     res.status(200).json({ answer: text });
   } catch (error) {
     console.error(error);

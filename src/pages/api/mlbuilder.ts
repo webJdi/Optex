@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { retrieveContext } from '../../services/rag';
 import { NextApiRequest, NextApiResponse } from 'next';
 
@@ -10,7 +10,7 @@ interface ConversationMessage {
 }
 
 // Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
@@ -29,8 +29,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Retrieve context from vectorized document for cement industry knowledge
     const contextChunks = await retrieveContext(query, 2);
     const context = contextChunks.join('\n');
-
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     
     // Build context about current session
     let sessionContext = '';
@@ -61,7 +59,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ).join('\n');
     }
 
-    const prompt = `You are an expert Data Scientist and ML Engineer with deep knowledge in:
+    const result = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `You are an expert Data Scientist and ML Engineer with deep knowledge in:
 - Data preprocessing, cleaning, and feature engineering
 - Machine learning algorithms (supervised, unsupervised, deep learning)
 - Model evaluation, hyperparameter tuning, and deployment
@@ -85,11 +85,10 @@ Current Session Context:${sessionContext}${chatHistory}
 
 User Query: ${query}
 
-Respond as a professional data scientist would, providing intelligent insights and recommendations.`;
+Respond as a professional data scientist would, providing intelligent insights and recommendations.`
+    });
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
+    const text = result.text;
 
     res.status(200).json({ 
       answer: text,

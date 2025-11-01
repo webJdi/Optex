@@ -17,13 +17,19 @@ def initialize_firebase():
     """Initialize Firebase Admin SDK"""
     try:
         if not firebase_admin._apps:
-            service_key_path = os.path.join(os.path.dirname(__file__), "serviceAccountKey.json")
+            # Try production path first (Render secret files)
+            service_key_path = "/etc/secrets/serviceAccountKey.json"
+            
+            # Fallback to local development path
+            if not os.path.exists(service_key_path):
+                service_key_path = os.path.join(os.path.dirname(__file__), "serviceAccountKey.json")
             
             if os.path.exists(service_key_path):
                 cred = credentials.Certificate(service_key_path)
                 firebase_admin.initialize_app(cred)
                 print(f"✓ Firebase initialized with service account key: {service_key_path}")
             else:
+                # Use default credentials (works with environment variables)
                 firebase_admin.initialize_app(options={
                     'projectId': 'optex-b13d3',
                 })
