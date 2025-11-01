@@ -256,13 +256,11 @@ def predict_lsf_from_features(limestone_pct, clay_pct, mill_power, mill_vibratio
         Predicted LSF value
     """
     if ml_models['lsf'] is None:
-        print("⚠ LSF model not loaded, using calculated estimate")
-        # Fallback calculation based on limestone content
-        base_lsf = 95 + (limestone_pct - 75) * 0.3
-        return max(95, min(105, base_lsf))
+        print("⚠ LSF model not loaded, using fallback")
+        return 97.5  # Default target LSF
     
     try:
-        # Prepare features for LSF model
+        # Prepare features for LSF model - MUST match training data column names
         features_lsf = pd.DataFrame([{
             'limestone_feeder_pct': limestone_pct,
             'clay_feeder_pct': clay_pct,
@@ -270,16 +268,26 @@ def predict_lsf_from_features(limestone_pct, clay_pct, mill_power, mill_vibratio
             'mill_vibration_mm_s': mill_vibration
         }])
         
-        # Predict LSF
+        print(f"LSF Model Input: limestone={limestone_pct:.2f}%, clay={clay_pct:.2f}%, power={mill_power:.2f}, vib={mill_vibration:.2f}")
+        
+        # Predict LSF using ML model
         lsf_pred = ml_models['lsf'].predict(features_lsf)[0]
-        print(f"✓ LSF Soft Sensor Prediction: {lsf_pred:.2f} (limestone: {limestone_pct:.1f}%, clay: {clay_pct:.1f}%)")
+        
+        print(f"✓ LSF Model Prediction: {lsf_pred:.2f}")
+        
+        # LSF typically ranges from 85-105 in cement manufacturing
+        # Only clamp to prevent extreme outliers
+        if lsf_pred < 80 or lsf_pred > 110:
+            print(f"⚠ LSF prediction {lsf_pred:.2f} outside extreme range [80-110], clamping")
+            lsf_pred = np.clip(lsf_pred, 80.0, 110.0)
+        
         return float(lsf_pred)
         
     except Exception as e:
         print(f"✗ LSF prediction error: {e}")
-        # Fallback calculation
-        base_lsf = 95 + (limestone_pct - 75) * 0.3
-        return max(95, min(105, base_lsf))
+        import traceback
+        traceback.print_exc()
+        return 97.5  # Fallback
 
 # ML-based relationship learning
 class MLRelationshipModel:
