@@ -48,6 +48,27 @@ function calculateLimestoneToClayRatio(reading: PlantReading): number {
   }
 }
 
+// Fetch LSF prediction from soft sensor
+const fetchLSFPrediction = async (reading: PlantReading): Promise<number> => {
+  try {
+    // Call the backend soft sensor prediction endpoint
+    const response = await fetch('http://localhost:8000/predict_from_current_state');
+    if (response.ok) {
+      const data = await response.json();
+      console.log('LSF Soft Sensor Prediction:', data.lsf_predicted);
+      return data.lsf_predicted;
+    } else {
+      // Fallback to simulated LSF from plant reading
+      console.log('LSF Soft Sensor unavailable, using simulated value');
+      return reading.kpi.lsf;
+    }
+  } catch (error) {
+    console.error('Error fetching LSF prediction:', error);
+    // Fallback to simulated LSF
+    return reading.kpi.lsf;
+  }
+};
+
 const fetchLimitsFromFirebase = async () => {
   const querySnapshot = await getDocs(collection(db, 'apclimits'));
   const mvLimits: Variable[] = [];
@@ -121,6 +142,7 @@ export default function SoftSensors() {
   const [controlledVars, setControlledVars] = useState<Variable[]>([]);
   const [reading, setReading] = useState<PlantReading | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
   // Body margin effect
   useEffect(() => {
@@ -143,6 +165,9 @@ export default function SoftSensors() {
         if (readingData) {
           setReading(readingData);
           
+          // Fetch LSF prediction from soft sensor
+          const lsfPrediction = await fetchLSFPrediction(readingData);
+          
           // Update PV values immediately
           const updatedMvLimits = limitsData.mvLimits.map(variable => {
             // Special handling for Limestone to Clay Ratio - calculate from raw mill data
@@ -159,13 +184,25 @@ export default function SoftSensors() {
             };
           });
           
-          const updatedCvLimits = limitsData.cvLimits.map(variable => ({
-            ...variable,
-            pv: variable.mappingKey ? getNestedValue(readingData, variable.mappingKey) : 0
-          }));
+          const updatedCvLimits = limitsData.cvLimits.map(variable => {
+            // Special handling for LSF - use soft sensor prediction
+            if (variable.name === 'LSF') {
+              console.log('Using LSF Soft Sensor Prediction for PV:', lsfPrediction);
+              return {
+                ...variable,
+                pv: lsfPrediction
+              };
+            }
+            // For other CVs, use the mapping key
+            return {
+              ...variable,
+              pv: variable.mappingKey ? getNestedValue(readingData, variable.mappingKey) : 0
+            };
+          });
           
           setManipulatedVars(updatedMvLimits);
           setControlledVars(updatedCvLimits);
+          setLastUpdate(new Date());
         } else {
           // No reading available, set limits with PV = 0
           setManipulatedVars(limitsData.mvLimits);
@@ -182,8 +219,8 @@ export default function SoftSensors() {
     // Initial fetch
     fetchAllData();
     
-    // Poll every 5 minutes
-    const interval = setInterval(fetchAllData, 300000);
+    // Poll every 90 seconds (1.5 minutes) for real-time updates
+    const interval = setInterval(fetchAllData, 90000);
     return () => clearInterval(interval);
   }, [user, loading]);
 
@@ -293,10 +330,15 @@ export default function SoftSensors() {
           overflow: 'auto'
         }}>
           {/* Header */}
-          <Box sx={{ mb: 1 }}>
-            <PageHeader pageName="APC Limits" />
+          <PageHeader pageName="APC Limits" />
+          
+          <Box>
+            {lastUpdate && (
+              <Typography sx={{ color: textColor2, fontSize: 12, opacity: 0.7 }}>
+                Last Updated: {lastUpdate.toLocaleTimeString()} (Auto-refresh every 90s)
+              </Typography>
+            )}
           </Box>
-
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, gap: 4 }}>
             <Box sx={{ flex: 1 }}>
               <Typography variant="h6" sx={{ color: textColor, fontWeight: 600, mb: 3 }}>

@@ -507,9 +507,17 @@ class PlantSimulator:
         separator_speed_rpm = np.clip(separator_speed_rpm, 60, 120)
 
         # --- 3. Pyroprocessing Simulation (using actual controlled values) ---
-        # Use actual controlled values instead of calculated ones
-        trad_fuel_rate_kg_hr = self.actual_values['trad_fuel_rate_kg_hr']
-        alt_fuel_rate_kg_hr = self.actual_values['alt_fuel_rate_kg_hr']
+        # Use actual controlled values with realistic disturbances
+        # Add fuel flow disturbances (pressure variations, fuel quality variations)
+        trad_fuel_disturbance = np.random.normal(0, 30) + np.sin(self.tick / 150) * 20  # ±50 kg/hr variation
+        alt_fuel_disturbance = np.random.normal(0, 15) + np.sin(self.tick / 180) * 10   # ±25 kg/hr variation
+        
+        trad_fuel_rate_kg_hr = self.actual_values['trad_fuel_rate_kg_hr'] + trad_fuel_disturbance
+        trad_fuel_rate_kg_hr = np.clip(trad_fuel_rate_kg_hr, 900, 1800)  # Keep within safe limits
+        
+        alt_fuel_rate_kg_hr = self.actual_values['alt_fuel_rate_kg_hr'] + alt_fuel_disturbance
+        alt_fuel_rate_kg_hr = np.clip(alt_fuel_rate_kg_hr, 100, 1000)
+        
         raw_meal_feed_rate_tph = self.actual_values['raw_meal_feed_rate_tph']
         kiln_speed_rpm = self.actual_values['kiln_speed_rpm']
         id_fan_speed_pct = self.actual_values['id_fan_speed_pct']
@@ -521,7 +529,12 @@ class PlantSimulator:
         tsr_pct = (alt_fuel_rate_kg_hr * 4500) / total_energy_kcal_hr * 100 if total_energy_kcal_hr > 0 else 25
         
         # Burning zone temperature - influenced by fuel rates and heat transfer
-        burning_zone_temp_c = 1450 + (base_shc - 740) * 2 + np.random.normal(0, 5)
+        # More sensitive to fuel fluctuations with additional thermal inertia effects
+        fuel_heat_effect = (base_shc - 740) * 2  # Base heat effect
+        thermal_disturbance = np.random.normal(0, 8)  # Increased temperature noise
+        thermal_lag = np.sin(self.tick / 100) * 5  # Thermal inertia oscillation
+        
+        burning_zone_temp_c = 1450 + fuel_heat_effect + thermal_disturbance + thermal_lag
         burning_zone_temp_c = np.clip(burning_zone_temp_c, 1400, 1500)
         
         # Kiln motor torque - related to material load and kiln speed
