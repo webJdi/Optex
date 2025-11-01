@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Any
 import numpy as np
 import time
 import joblib
@@ -703,7 +703,7 @@ class OptimizationResult(BaseModel):
 class DualOptimizationResponse(BaseModel):
     apc_optimization: OptimizationResult
     engineering_optimization: OptimizationResult
-    optimization_history: List[Dict[str, float]]  # Trial history for plotting
+    optimization_history: List[Dict[str, Any]]  # Trial history for plotting (contains floats and nested dicts)
     pricing_details: Dict[str, float]
 
 class OptimizeRequest(BaseModel):
@@ -1038,6 +1038,7 @@ async def optimize_with_limits(
             # Use hybrid model to predict constraint responses for Clinkerization
             constraint_penalty = 0
             constraint_violations = []
+            predicted_constraints = {}
             
             if segment == 'Clinkerization':
                 predicted_constraints = hybrid_model.predict_constraint_responses(
@@ -1069,13 +1070,20 @@ async def optimize_with_limits(
             # Economic objective (maximize profit)
             objective_score = economic_value - constraint_penalty
             
-            # Store trial history
-            trial_history.append({
+            # Store trial history with variable values
+            trial_data = {
                 'trial': trial.number,
                 'economic_value': economic_value,
                 'constraint_penalty': constraint_penalty,
-                'objective_score': objective_score
-            })
+                'objective_score': objective_score,
+                'optimization_vars': optimization_vars.copy()
+            }
+            
+            # Add constraint predictions if available
+            if segment == 'Clinkerization' and predicted_constraints:
+                trial_data['constraint_vars'] = predicted_constraints.copy()
+            
+            trial_history.append(trial_data)
             
             return objective_score
         
@@ -1187,6 +1195,12 @@ async def optimize_targets_api_post(request: OptimizeRequest):
         # Keep only last 100 optimization runs
         if len(optimization_history) > 100:
             optimization_history = optimization_history[-100:]
+    
+    # Debug: Print first history item to verify structure
+    combined_history = apc_history + eng_history
+    if combined_history:
+        print(f"🔍 Backend Debug: First history item keys: {combined_history[0].keys()}")
+        print(f"🔍 Backend Debug: First history item: {combined_history[0]}")
     
     # Prepare pricing details for response
     pricing_details = {

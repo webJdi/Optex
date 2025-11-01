@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRequireAuth } from '../hooks/useAuth';
 import { FormControl, Select, MenuItem, SelectChangeEvent } from '@mui/material';
 import Sidebar from '../components/Sidebar';
@@ -49,6 +49,8 @@ interface DualOptimizationResponse {
     economic_value: number;
     constraint_penalty: number;
     objective_score: number;
+    optimization_vars?: Record<string, number>;
+    constraint_vars?: Record<string, number>;
   }>;
   pricing_details?: Record<string, number>;
 }
@@ -71,6 +73,45 @@ export default function Optimizer() {
   const [running, setRunning] = useState(false);
   const [autoSchedule, setAutoSchedule] = useState(false);
   const hasLoadedInitialState = useRef(false); // Track if we've loaded state from Firebase
+  
+  // State for toggling chart lines
+  const [hiddenOptimizationLines, setHiddenOptimizationLines] = useState<Record<string, boolean>>({});
+  const [hiddenConstraintLines, setHiddenConstraintLines] = useState<Record<string, boolean>>({});
+
+  // Memoize chart data to prevent flickering on re-renders
+  const optimizationChartData = useMemo(() => {
+    if (!result?.optimization_history || result.optimization_history.length === 0) return [];
+    
+    const apcData = result.optimization_history.slice(0, Math.floor(result.optimization_history.length / 2));
+    return apcData.map((trial, idx) => {
+      const vars = trial.optimization_vars || {};
+      return {
+        trial: idx + 1,
+        trad_fuel: vars.trad_fuel_rate_kg_hr || null,
+        alt_fuel: vars.alt_fuel_rate_kg_hr || null,
+        raw_meal: vars.raw_meal_feed_rate_tph || null,
+        kiln_speed: vars.kiln_speed_rpm || null,
+        fan_speed: vars.id_fan_speed_pct || null,
+      };
+    });
+  }, [result?.optimization_history]);
+
+  const constraintChartData = useMemo(() => {
+    if (!result?.optimization_history || result.optimization_history.length === 0) return [];
+    
+    const apcData = result.optimization_history.slice(0, Math.floor(result.optimization_history.length / 2));
+    return apcData.map((trial, idx) => {
+      const constraints = trial.constraint_vars || {};
+      return {
+        trial: idx + 1,
+        torque: constraints.kiln_motor_torque_pct || null,
+        temp: constraints.burning_zone_temp_c || null,
+        o2: constraints.kiln_inlet_o2_pct || null,
+        fan_power: constraints.id_fan_power_kw || null,
+        benefit: trial.economic_value || null,
+      };
+    });
+  }, [result?.optimization_history]);
 
   // Load initial optimizer state and latest results on mount - ONLY ONCE
   useEffect(() => {
@@ -119,7 +160,6 @@ export default function Optimizer() {
         if (!querySnapshot.empty) {
           const latestDoc = querySnapshot.docs[0].data();
           
-          // Reconstruct the dual optimization response from Firebase data
           const reconstructedResult: DualOptimizationResponse = {
             apc_optimization: {
               suggested_targets: latestDoc.apc_targets || {},
@@ -135,8 +175,12 @@ export default function Optimizer() {
               model_type: 'hybrid_fp_ml',
               success: true
             },
-            pricing_details: latestDoc.pricing_details || {}
+            pricing_details: latestDoc.pricing_details || {},
+            optimization_history: latestDoc.optimization_history || []  // Load convergence plot data
           };
+          
+          console.log('Loaded optimization_history:', latestDoc.optimization_history);
+          console.log('Reconstructed result:', reconstructedResult);
           
           setResult(reconstructedResult);
           console.log('Loaded latest optimization from Firebase');
@@ -212,7 +256,8 @@ export default function Optimizer() {
               model_type: 'hybrid_fp_ml',
               success: true
             },
-            pricing_details: latestDoc.pricing_details || {}
+            pricing_details: latestDoc.pricing_details || {},
+            optimization_history: latestDoc.optimization_history || []  // Load convergence plot data
           };
           
           setResult(reconstructedResult);
@@ -431,84 +476,92 @@ export default function Optimizer() {
                   </Typography>
                 </Box>
               )}
+              
+              
+            </Box>
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 2,
+                background: textColor3,
+                p: 1,
+                borderRadius: 2,
+              }}
+            >
               {running && (
-                <Typography sx={{ color: accent, fontWeight: 600, fontSize: 13 }}>
-                  Time left: {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
+                <Typography sx={{ color: textColor, fontWeight: 600, fontSize: 13 }}>
+                  Next Target: {Math.floor(timer / 60)}:{(timer % 60).toString().padStart(2, '0')}
                 </Typography>
               )}
-              {result?.apc_optimization?.model_type && (
-                <Typography sx={{ color: textColor2, fontSize: 12 }}>
-                  Model: {result.apc_optimization.model_type === 'hybrid_fp_ml' ? 'Hybrid (FP + ML)' : result.apc_optimization.model_type}
-                </Typography>
-              )}
-            </Box>
-
-            <Box sx={{
-              width: 120,
-              height: 30,
-              background: 'linear-gradient(135deg, rgba(42, 39, 82, 0.6) 0%, rgba(31, 28, 68, 0.8) 100%)',
-              borderRadius: 2,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
-            }}>
-              <Box
-                sx={{
-                  width: 60,
+                <Box sx={{
+                  width: 120,
                   height: 30,
-                  background: running || loading 
-                    ? 'linear-gradient(135deg, rgba(106, 130, 251, 0.4) 0%, rgba(80, 100, 200, 0.6) 100%)'
-                    : 'linear-gradient(135deg, rgba(42, 39, 82, 0.6) 0%, rgba(31, 28, 68, 0.8) 100%)',
-                  borderRight: '1px solid rgba(106, 130, 251, 0.3)',
+                  background: 'linear-gradient(135deg, rgba(42, 39, 82, 0.6) 0%, rgba(31, 28, 68, 0.8) 100%)',
                   borderRadius: 2,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  cursor: (running || loading) ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s',
-                  opacity: (running || loading) ? 0.6 : 1,
-                  '&:hover': (running || loading) ? {} : {
-                    background: 'linear-gradient(135deg, rgba(52, 49, 92, 0.8) 0%, rgba(41, 38, 78, 1) 100%)',
-                    borderColor: 'rgba(106, 130, 251, 0.6)',
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 4px 12px rgba(106, 130, 251, 0.3)',
-                  },
-                }}
-                onClick={() => {
-                  if (!running && !loading) handleStart();
-                }}
-              >
-                <PlayArrowIcon sx={{ color: textColor3 }} />
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+                }}>
+                  <Box
+                    sx={{
+                      width: 60,
+                      height: 30,
+                      background: running || loading 
+                        ? 'linear-gradient(135deg, rgba(106, 130, 251, 0.4) 0%, rgba(80, 100, 200, 0.6) 100%)'
+                        : 'linear-gradient(135deg, rgba(42, 39, 82, 0.6) 0%, rgba(31, 28, 68, 0.8) 100%)',
+                      borderRight: '1px solid rgba(106, 130, 251, 0.3)',
+                      borderRadius: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: (running || loading) ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s',
+                      opacity: (running || loading) ? 0.6 : 1,
+                      '&:hover': (running || loading) ? {} : {
+                        background: 'linear-gradient(135deg, rgba(52, 49, 92, 0.8) 0%, rgba(41, 38, 78, 1) 100%)',
+                        borderColor: 'rgba(106, 130, 251, 0.6)',
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 4px 12px rgba(106, 130, 251, 0.3)',
+                      },
+                    }}
+                    onClick={() => {
+                      if (!running && !loading) handleStart();
+                    }}
+                  >
+                    <PlayArrowIcon sx={{ color: textColor }} />
+                  </Box>
+                  <Box
+                    sx={{
+                      width: 60,
+                      height: 30,
+                      background: (!running && !loading) 
+                        ? 'linear-gradient(135deg, rgba(42, 39, 82, 0.4) 0%, rgba(31, 28, 68, 0.6) 100%)'
+                        : 'linear-gradient(135deg, rgba(42, 39, 82, 0.6) 0%, rgba(31, 28, 68, 0.8) 100%)',
+                      borderRadius: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: (!running && !loading) ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s',
+                      opacity: (!running && !loading) ? 0.4 : 1,
+                      '&:hover': (!running && !loading) ? {} : {
+                        background: 'linear-gradient(135deg, rgba(52, 49, 92, 0.8) 0%, rgba(41, 38, 78, 1) 100%)',
+                        borderColor: 'rgba(106, 130, 251, 0.6)',
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 4px 12px rgba(106, 130, 251, 0.3)',
+                      },
+                    }}
+                    onClick={() => {
+                      if (running || loading) handleStop();
+                    }}
+                  >
+                    <StopIcon sx={{ color: textColor }} />
+                  </Box>
+                </Box>
               </Box>
-              <Box
-                sx={{
-                  width: 60,
-                  height: 30,
-                  background: (!running && !loading) 
-                    ? 'linear-gradient(135deg, rgba(42, 39, 82, 0.4) 0%, rgba(31, 28, 68, 0.6) 100%)'
-                    : 'linear-gradient(135deg, rgba(42, 39, 82, 0.6) 0%, rgba(31, 28, 68, 0.8) 100%)',
-                  borderRadius: 2,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: (!running && !loading) ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s',
-                  opacity: (!running && !loading) ? 0.4 : 1,
-                  '&:hover': (!running && !loading) ? {} : {
-                    background: 'linear-gradient(135deg, rgba(52, 49, 92, 0.8) 0%, rgba(41, 38, 78, 1) 100%)',
-                    borderColor: 'rgba(106, 130, 251, 0.6)',
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 4px 12px rgba(106, 130, 251, 0.3)',
-                  },
-                }}
-                onClick={() => {
-                  if (running || loading) handleStop();
-                }}
-              >
-                <StopIcon sx={{ color: textColor3 }} />
-              </Box>
-            </Box>
           </Box>
 
           
@@ -524,26 +577,24 @@ export default function Optimizer() {
                 
                 {/* Header Row */}
                 <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-                  <Box sx={{ flex: 2 }}></Box>
+                  <Box sx={{ flex: 5 }}></Box>
                   <Box sx={{ 
                     flex: 1, 
                     textAlign: 'center',
-                    background: 'linear-gradient(135deg, rgba(33, 150, 243, 0.1) 0%, rgba(25, 118, 210, 0.15) 100%)',
                     borderRadius: 1,
                     py: 0.5
                   }}>
-                    <Typography sx={{ color: col1, fontSize: 10, fontWeight: 600 }}>
+                    <Typography sx={{ color: textColor3, fontSize: 12, fontWeight: 600 }}>
                       Actual Target
                     </Typography>
                   </Box>
                   <Box sx={{ 
                     flex: 1, 
                     textAlign: 'center',
-                    background: 'linear-gradient(135deg, rgba(156, 39, 176, 0.1) 0%, rgba(123, 31, 162, 0.15) 100%)',
                     borderRadius: 1,
                     py: 0.5
                   }}>
-                    <Typography sx={{ color: col2, fontSize: 10, fontWeight: 600 }}>
+                    <Typography sx={{ color: textColor3, fontSize: 10, fontWeight: 600 }}>
                       Beyond Range Target
                     </Typography>
                   </Box>
@@ -551,23 +602,41 @@ export default function Optimizer() {
 
                 {/* Variable Rows */}
                 {variables[section].constraints.map((v) => (
-                  <Box key={v.value} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
-                    <Typography sx={{ flex: 2, color: textColor3, fontSize: 11 }}>
-                      {v.label}
-                    </Typography>
-                    <Box sx={{ flex: 1, textAlign: 'center' }}>
-                      {result?.apc_optimization?.suggested_targets?.[v.value] !== undefined && (
-                        <Typography sx={{ color: col1, fontWeight: 600, fontSize: 12 }}>
-                          {Number(result.apc_optimization.suggested_targets[v.value]).toFixed(2)}
-                        </Typography>
-                      )}
-                    </Box>
-                    <Box sx={{ flex: 1, textAlign: 'center' }}>
-                      {result?.engineering_optimization?.suggested_targets?.[v.value] !== undefined && (
-                        <Typography sx={{ color: col2, fontWeight: 600, fontSize: 12 }}>
-                          {Number(result.engineering_optimization.suggested_targets[v.value]).toFixed(2)}
-                        </Typography>
-                      )}
+                  
+                    <Box key={v.value} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
+                      <Typography sx={{ flex: 2, color: textColor3, fontSize: 14 }}>
+                        {v.label}
+                      </Typography>
+                      <Box
+                        sx={{
+                          width: 160,
+                          height: 40,
+                          background: 'linear-gradient(135deg, rgba(42, 39, 82, 0.6) 0%, rgba(31, 28, 68, 0.8) 100%)',
+                          borderRadius: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: textColor,
+                          fontSize: 16,
+                          fontWeight: 500,
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+
+                        }}
+                      >
+                      <Box sx={{ flex: 1, textAlign: 'center' }}>
+                        {result?.apc_optimization?.suggested_targets?.[v.value] !== undefined && (
+                          <Typography sx={{ color: textColor, fontWeight: 600, fontSize: 14 }}>
+                            {Number(result.apc_optimization.suggested_targets[v.value]).toFixed(2)}
+                          </Typography>
+                        )}
+                      </Box>
+                      <Box sx={{ flex: 1, textAlign: 'center' }}>
+                        {result?.engineering_optimization?.suggested_targets?.[v.value] !== undefined && (
+                          <Typography sx={{ color: col4, fontWeight: 600, fontSize: 14 }}>
+                            {Number(result.engineering_optimization.suggested_targets[v.value]).toFixed(2)}
+                          </Typography>
+                        )}
+                      </Box>
                     </Box>
                   </Box>
                 ))}
@@ -583,26 +652,24 @@ export default function Optimizer() {
                 
                 {/* Header Row */}
                 <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-                  <Box sx={{ flex: 2 }}></Box>
+                  <Box sx={{ flex: 5 }}></Box>
                   <Box sx={{ 
                     flex: 1, 
                     textAlign: 'center',
-                    background: 'linear-gradient(135deg, rgba(33, 150, 243, 0.1) 0%, rgba(25, 118, 210, 0.15) 100%)',
                     borderRadius: 1,
                     py: 0.5
                   }}>
-                    <Typography sx={{ color: col1, fontSize: 10, fontWeight: 600, fontFamily: `'Montserrat', sans-serif` }}>
+                    <Typography sx={{ color: textColor3, fontSize: 12, fontWeight: 600 }}>
                       Actual Target
                     </Typography>
                   </Box>
                   <Box sx={{ 
                     flex: 1, 
                     textAlign: 'center',
-                    background: 'linear-gradient(135deg, rgba(156, 39, 176, 0.1) 0%, rgba(123, 31, 162, 0.15) 100%)',
                     borderRadius: 1,
                     py: 0.5
                   }}>
-                    <Typography sx={{ color: col2, fontSize: 10, fontWeight: 600, fontFamily: `'Montserrat', sans-serif` }}>
+                    <Typography sx={{ color: textColor3, fontSize: 10, fontWeight: 600 }}>
                       Beyond Range Target
                     </Typography>
                   </Box>
@@ -611,22 +678,39 @@ export default function Optimizer() {
                 {/* Variable Rows */}
                 {variables[section].optimization.map((v) => (
                   <Box key={v.value} sx={{ display: 'flex', gap: 1, mb: 1, alignItems: 'center' }}>
-                    <Typography sx={{ flex: 2, color: textColor3, fontSize: 11 }}>
+                    <Typography sx={{ flex: 2, color: textColor3, fontSize: 14 }}>
                       {v.label}
                     </Typography>
+                    <Box
+                        sx={{
+                          width: 160,
+                          height: 40,
+                          background: 'linear-gradient(135deg, rgba(42, 39, 82, 0.6) 0%, rgba(31, 28, 68, 0.8) 100%)',
+                          borderRadius: 2,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: textColor,
+                          fontSize: 16,
+                          fontWeight: 500,
+                          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+
+                        }}
+                      >
                     <Box sx={{ flex: 1, textAlign: 'center' }}>
                       {result?.apc_optimization?.suggested_targets?.[v.value] !== undefined && (
-                        <Typography sx={{ color: col1, fontWeight: 600, fontSize: 12 }}>
+                        <Typography sx={{ color: textColor, fontWeight: 600, fontSize: 14 }}>
                           {Number(result.apc_optimization.suggested_targets[v.value]).toFixed(2)}
                         </Typography>
                       )}
                     </Box>
                     <Box sx={{ flex: 1, textAlign: 'center' }}>
                       {result?.engineering_optimization?.suggested_targets?.[v.value] !== undefined && (
-                        <Typography sx={{ color: col2, fontWeight: 600, fontSize: 12 }}>
+                        <Typography sx={{ color: col4, fontWeight: 600, fontSize: 14 }}>
                           {Number(result.engineering_optimization.suggested_targets[v.value]).toFixed(2)}
                         </Typography>
                       )}
+                    </Box>
                     </Box>
                   </Box>
                 ))}
@@ -635,34 +719,37 @@ export default function Optimizer() {
           </Box>
 
           {/* Benefits Section - Middle */}
-          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2, mb: 2, background: textColor3, borderRadius: 3 }}>
             {/* Benefits within APC Limits */}
             <Box sx={{ flex: 1 }}>
               <Box sx={{ 
-                background: cardBg, 
+                
                 borderRadius: 3, 
-                p: 2,
-                minHeight: 100,
+                p: 1,
+                minHeight: 50,
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'center'
               }}>
-                <Typography sx={{ color: textColor3, fontWeight: 600, mb: 1, fontSize: 13 }}>
-                  Benefits within APC Limits
-                </Typography>
+
                 {result?.apc_optimization?.economic_value && (
                   <Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                      <Typography sx={{ color: textColor3, fontSize: 11 }}>Economic Value:</Typography>
-                      <Typography sx={{ color: col1, fontWeight: 600, fontSize: 13 }}>
+                      <Typography sx={{ color: textColor, fontSize: 14, padding:1 }}>Benefits within APC Limits</Typography>
+                      
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: 1,
+                          borderRadius: 2,
+                          background: cardBg
+                        }}
+                      >
+                      <Typography sx={{ color: col4, fontWeight: 600, fontSize: 13 }}>
                         ${result.apc_optimization.economic_value.toFixed(2)}/hr
                       </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography sx={{ color: textColor3, fontSize: 11 }}>Optimization Score:</Typography>
-                      <Typography sx={{ color: col1, fontWeight: 600, fontSize: 13 }}>
-                        {result.apc_optimization.optimization_score?.toFixed(2)}
-                      </Typography>
+                      </Box>
                     </Box>
                   </Box>
                 )}
@@ -675,32 +762,35 @@ export default function Optimizer() {
             </Box>
 
             {/* Benefits within Engineering Limits */}
-            <Box sx={{ flex: 1 }}>
+            <Box sx={{ flex: 1,
+              
+             }}>
               <Box sx={{ 
-                background: cardBg, 
+                
                 borderRadius: 3, 
-                p: 2,
-                minHeight: 100,
+                p: 1,
+                minHeight: 50,
                 display: 'flex',
                 flexDirection: 'column',
                 justifyContent: 'center'
               }}>
-                <Typography sx={{ color: textColor3, fontWeight: 600, mb: 1, fontSize: 13 }}>
-                  Benefits within Engg Limits
-                </Typography>
                 {result?.engineering_optimization?.economic_value && (
                   <Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                      <Typography sx={{ color: textColor3, fontSize: 11 }}>Economic Value:</Typography>
-                      <Typography sx={{ color: col2, fontWeight: 600, fontSize: 13 }}>
+                      <Typography sx={{ color: textColor, fontSize: 14, padding: 1 }}>Benefits within Engg Limits</Typography>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          padding: 1,
+                          borderRadius: 2,
+                          background: cardBg
+                        }}
+                      >
+                      <Typography sx={{ color: col4, fontWeight: 600, fontSize: 13 }}>
                         ${result.engineering_optimization.economic_value.toFixed(2)}/hr
                       </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <Typography sx={{ color: textColor3, fontSize: 11 }}>Optimization Score:</Typography>
-                      <Typography sx={{ color: col2, fontWeight: 600, fontSize: 13 }}>
-                        {result.engineering_optimization.optimization_score?.toFixed(2)}
-                      </Typography>
+                      </Box>
                     </Box>
                   </Box>
                 )}
@@ -714,56 +804,78 @@ export default function Optimizer() {
           </Box>
 
           {/* Plots Section - Bottom */}
-          <Box sx={{ display: 'flex', gap: 2, flex: 1, minHeight: 0 }}>
-            {/* Benefits within APC Limits */}
-            <Box sx={{ flex: 1 }}>
-              <Box sx={{ background: cardBg, borderRadius: 3, p: 2, height: '100%' }}>
+          <Box sx={{ display: 'flex', gap: 2, flex: 1, minHeight: 300 }}>
+            {/* Optimization Variables Trend (APC only) */}
+            <Box sx={{ flex: 1, minHeight: 300 }}>
+              <Box sx={{ background: cardBg, borderRadius: 3, p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <Typography sx={{ color: textColor3, fontWeight: 600, mb: 2, fontSize: 13 }}>
-                  Benefits within APC Limits
+                  Optimization Variables Trend (APC)
                 </Typography>
                 
                 {result?.optimization_history && result.optimization_history.length > 0 && (
-                  <ResponsiveContainer width="100%" height="85%">
-                    <LineChart
-                      data={result.optimization_history.slice(0, Math.floor(result.optimization_history.length / 2)).map((trial, idx) => ({
-                        trial: idx + 1,
-                        value: trial.objective_score,
-                      }))}
-                      margin={{ top: 5, right: 10, left: 0, bottom: 20 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                      <XAxis 
-                        dataKey="trial" 
-                        stroke={textColor2}
-                        style={{ fontSize: 10 }}
-                      />
-                      <YAxis 
-                        stroke={textColor2}
-                        style={{ fontSize: 10 }}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'rgba(30, 26, 46, 0.95)',
-                          border: '1px solid rgba(33, 150, 243, 0.3)',
-                          borderRadius: '4px',
-                          fontSize: 11
-                        }}
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="value" 
-                        stroke={col1} 
-                        strokeWidth={2}
-                        dot={false}
-                        name="APC Optimization"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <Box sx={{ flex: 1, minHeight: 300 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={optimizationChartData}
+                        margin={{ top: 5, right: 60, left: 0, bottom: 20 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                        <XAxis 
+                          dataKey="trial" 
+                          stroke={textColor2}
+                          style={{ fontSize: 10 }}
+                          label={{ value: 'Trial', position: 'insideBottom', offset: -10, style: { fontSize: 10, fill: textColor2 } }}
+                        />
+                        <YAxis 
+                          yAxisId="left"
+                          stroke={textColor2}
+                          style={{ fontSize: 10 }}
+                          label={{ value: 'Flow Rates & %', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: textColor2 } }}
+                        />
+                        <YAxis 
+                          yAxisId="right"
+                          orientation="right"
+                          stroke={textColor2}
+                          style={{ fontSize: 10 }}
+                          domain={[0, 10]}
+                          label={{ value: 'Kiln Speed (rpm)', angle: 90, position: 'insideRight', style: { fontSize: 10, fill: textColor2 } }}
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: 'rgba(30, 26, 46, 0.95)',
+                            border: '1px solid rgba(33, 150, 243, 0.3)',
+                            borderRadius: '4px',
+                            fontSize: 11
+                          }}
+                          formatter={(value: any) => {
+                            if (value === null) return ['N/A', ''];
+                            return [Number(value).toFixed(2), ''];
+                          }}
+                        />
+                        <Legend 
+                          wrapperStyle={{ fontSize: 10 }} 
+                          onClick={(e) => {
+                            const dataKey = e.dataKey as string;
+                            setHiddenOptimizationLines(prev => ({
+                              ...prev,
+                              [dataKey]: !prev[dataKey]
+                            }));
+                          }}
+                          iconType="line"
+                        />
+                        <Line yAxisId="left" type="monotone" dataKey="trad_fuel" stroke={col1} strokeWidth={1.5} dot={false} name="Trad Fuel (kg/hr)" connectNulls hide={hiddenOptimizationLines['trad_fuel']} isAnimationActive={false} />
+                        <Line yAxisId="left" type="monotone" dataKey="alt_fuel" stroke={col2} strokeWidth={1.5} dot={false} name="Alt Fuel (kg/hr)" connectNulls hide={hiddenOptimizationLines['alt_fuel']} isAnimationActive={false} />
+                        <Line yAxisId="left" type="monotone" dataKey="raw_meal" stroke={col3} strokeWidth={1.5} dot={false} name="Raw Meal (tph)" connectNulls hide={hiddenOptimizationLines['raw_meal']} isAnimationActive={false} />
+                        <Line yAxisId="right" type="monotone" dataKey="kiln_speed" stroke={col4} strokeWidth={1.5} dot={false} name="Kiln Speed (rpm)" connectNulls hide={hiddenOptimizationLines['kiln_speed']} isAnimationActive={false} />
+                        <Line yAxisId="left" type="monotone" dataKey="fan_speed" stroke={accent} strokeWidth={1.5} dot={false} name="Fan Speed (%)" connectNulls hide={hiddenOptimizationLines['fan_speed']} isAnimationActive={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </Box>
                 )}
                 
                 {(!result || !result.optimization_history) && (
                   <Box sx={{ 
-                    height: '85%', 
+                    flex: 1,
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center',
@@ -771,62 +883,83 @@ export default function Optimizer() {
                     borderRadius: 2
                   }}>
                     <Typography sx={{ color: textColor2, fontSize: 11 }}>
-                      Run optimization to see convergence plot
+                      Run optimization to see variable trends
                     </Typography>
                   </Box>
                 )}
               </Box>
             </Box>
 
-            {/* Benefits within Engineering Limits */}
-            <Box sx={{ flex: 1 }}>
-              <Box sx={{ background: cardBg, borderRadius: 3, p: 2, height: '100%' }}>
+            {/* Constraint Variables & Benefits (APC only) */}
+            <Box sx={{ flex: 1, minHeight: 300 }}>
+              <Box sx={{ background: cardBg, borderRadius: 3, p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <Typography sx={{ color: textColor3, fontWeight: 600, mb: 2, fontSize: 13 }}>
-                  Benefits within Engg Limits
+                  Constraint Variables & Benefits (APC)
                 </Typography>
                 
                 {result?.optimization_history && result.optimization_history.length > 0 && (
-                  <ResponsiveContainer width="100%" height="85%">
-                    <LineChart
-                      data={result.optimization_history.slice(Math.floor(result.optimization_history.length / 2)).map((trial, idx) => ({
-                        trial: idx + 1,
-                        value: trial.objective_score,
-                      }))}
-                      margin={{ top: 5, right: 10, left: 0, bottom: 20 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                      <XAxis 
-                        dataKey="trial" 
-                        stroke={textColor2}
-                        style={{ fontSize: 10 }}
-                      />
-                      <YAxis 
-                        stroke={textColor2}
-                        style={{ fontSize: 10 }}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: 'rgba(30, 26, 46, 0.95)',
-                          border: '1px solid rgba(156, 39, 176, 0.3)',
-                          borderRadius: '4px',
-                          fontSize: 11
-                        }}
-                      />
-                      <Line 
-                        type="monotone" 
-                        dataKey="value" 
-                        stroke={col2} 
-                        strokeWidth={2}
-                        dot={false}
-                        name="Engineering Optimization"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <Box sx={{ flex: 1, minHeight: 300 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart
+                        data={constraintChartData}
+                        margin={{ top: 5, right: 60, left: 0, bottom: 20 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                        <XAxis 
+                          dataKey="trial" 
+                          stroke={textColor2}
+                          style={{ fontSize: 10 }}
+                          label={{ value: 'Trial', position: 'insideBottom', offset: -10, style: { fontSize: 10, fill: textColor2 } }}
+                        />
+                        <YAxis 
+                          yAxisId="left"
+                          stroke={textColor2}
+                          style={{ fontSize: 10 }}
+                          label={{ value: 'Constraints', angle: -90, position: 'insideLeft', style: { fontSize: 10, fill: textColor2 } }}
+                        />
+                        <YAxis 
+                          yAxisId="right"
+                          orientation="right"
+                          stroke="#4caf50"
+                          style={{ fontSize: 10 }}
+                          label={{ value: 'Benefit ($/hr)', angle: 90, position: 'insideRight', style: { fontSize: 10, fill: '#4caf50' } }}
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: 'rgba(30, 26, 46, 0.95)',
+                            border: '1px solid rgba(156, 39, 176, 0.3)',
+                            borderRadius: '4px',
+                            fontSize: 11
+                          }}
+                          formatter={(value: any, name: string) => {
+                            if (value === null) return ['N/A', name];
+                            return [Number(value).toFixed(2), name];
+                          }}
+                        />
+                        <Legend 
+                          wrapperStyle={{ fontSize: 10 }} 
+                          onClick={(e) => {
+                            const dataKey = e.dataKey as string;
+                            setHiddenConstraintLines(prev => ({
+                              ...prev,
+                              [dataKey]: !prev[dataKey]
+                            }));
+                          }}
+                          iconType="line"
+                        />
+                        <Line yAxisId="left" type="monotone" dataKey="torque" stroke={col1} strokeWidth={1.5} dot={false} name="Torque (%)" connectNulls hide={hiddenConstraintLines['torque']} isAnimationActive={false} />
+                        <Line yAxisId="left" type="monotone" dataKey="temp" stroke={col2} strokeWidth={1.5} dot={false} name="Temp (°C)" connectNulls hide={hiddenConstraintLines['temp']} isAnimationActive={false} />
+                        <Line yAxisId="left" type="monotone" dataKey="o2" stroke={col3} strokeWidth={1.5} dot={false} name="O₂ (%)" connectNulls hide={hiddenConstraintLines['o2']} isAnimationActive={false} />
+                        <Line yAxisId="left" type="monotone" dataKey="fan_power" stroke={col4} strokeWidth={1.5} dot={false} name="Fan Power (kW)" connectNulls hide={hiddenConstraintLines['fan_power']} isAnimationActive={false} />
+                        <Line yAxisId="right" type="monotone" dataKey="benefit" stroke="#4caf50" strokeWidth={2} dot={false} name="Benefit ($/hr)" connectNulls hide={hiddenConstraintLines['benefit']} isAnimationActive={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </Box>
                 )}
                 
                 {(!result || !result.optimization_history) && (
                   <Box sx={{ 
-                    height: '85%', 
+                    flex: 1,
                     display: 'flex', 
                     alignItems: 'center', 
                     justifyContent: 'center',
@@ -834,7 +967,7 @@ export default function Optimizer() {
                     borderRadius: 2
                   }}>
                     <Typography sx={{ color: textColor3, fontSize: 11 }}>
-                      Run optimization to see convergence plot
+                      Run optimization to see constraint trends
                     </Typography>
                   </Box>
                 )}

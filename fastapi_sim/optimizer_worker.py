@@ -41,6 +41,30 @@ def save_optimization_to_firebase(result, segment):
     try:
         db = firestore.client()
         
+        # Convert optimization_history to a simple list if it exists
+        opt_history = result.get('optimization_history', [])
+        if opt_history and isinstance(opt_history, list):
+            # Ensure it's a list of simple dicts with serializable values
+            opt_history = [
+                {
+                    'trial': item.get('trial', idx + 1),
+                    'economic_value': float(item.get('economic_value', 0)),
+                    'constraint_penalty': float(item.get('constraint_penalty', 0)),
+                    'objective_score': float(item.get('objective_score', 0)),
+                    'optimization_vars': item.get('optimization_vars', {}),  # Include optimization variables
+                    'constraint_vars': item.get('constraint_vars', {})  # Include constraint variables
+                }
+                for idx, item in enumerate(opt_history)
+            ]
+        else:
+            opt_history = []
+        
+        # Debug: Verify what we're about to save
+        if opt_history:
+            print(f"🔍 Debug: Saving {len(opt_history)} history items to Firebase")
+            print(f"🔍 Debug: First item to be saved keys: {opt_history[0].keys()}")
+            print(f"🔍 Debug: First item to be saved: {opt_history[0]}")
+        
         optimization_record = {
             'timestamp': firestore.SERVER_TIMESTAMP,
             'segment': segment,
@@ -52,13 +76,16 @@ def save_optimization_to_firebase(result, segment):
             'engineering_optimization_score': result.get('engineering_optimization', {}).get('optimization_score', 0),
             'economic_benefit': (result.get('engineering_optimization', {}).get('economic_value', 0) -
                                 result.get('apc_optimization', {}).get('economic_value', 0)),
-            'pricing_details': result.get('pricing_details', {})
+            'pricing_details': result.get('pricing_details', {}),
+            'optimization_history': opt_history  # Save the cleaned convergence plot data
         }
         
         db.collection('optimized_targets').add(optimization_record)
-        print("💾 Optimization results saved to Firebase")
+        print(f"💾 Optimization results saved to Firebase (history: {len(opt_history)} trials)")
     except Exception as e:
         print(f"⚠ Error saving to Firebase: {e}")
+        import traceback
+        traceback.print_exc()
 
 def run_optimization(segment: str):
     """
@@ -88,6 +115,19 @@ def run_optimization(segment: str):
         if response.status_code == 200:
             result = response.json()
             print(f"✓ Optimization completed for {segment}")
+            
+            # Debug: Check what we received
+            print(f"🔍 Debug: Result keys: {result.keys()}")
+            print(f"🔍 Debug: optimization_history type: {type(result.get('optimization_history'))}")
+            print(f"🔍 Debug: optimization_history length: {len(result.get('optimization_history', []))}")
+            if result.get('optimization_history'):
+                first_item = result['optimization_history'][0]
+                print(f"🔍 Debug: First history item keys: {first_item.keys()}")
+                print(f"🔍 Debug: First history item: {first_item}")
+                if 'optimization_vars' in first_item:
+                    print(f"🔍 Debug: optimization_vars in first item: {first_item['optimization_vars']}")
+                if 'constraint_vars' in first_item:
+                    print(f"🔍 Debug: constraint_vars in first item: {first_item['constraint_vars']}")
             
             # Save results to Firebase
             save_optimization_to_firebase(result, segment)
