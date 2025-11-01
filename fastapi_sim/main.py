@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 import numpy as np
 import time
 import joblib
@@ -12,6 +12,8 @@ import optuna
 from threading import Lock
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 app = FastAPI()
 
@@ -23,6 +25,50 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Initialize Firebase Admin SDK
+try:
+    # Initialize Firebase if not already initialized
+    if not firebase_admin._apps:
+        import os
+        
+        # Try to use service account key file if it exists
+        service_key_path = os.path.join(os.path.dirname(__file__), "serviceAccountKey.json")
+        
+        if os.path.exists(service_key_path):
+            cred = credentials.Certificate(service_key_path)
+            firebase_admin.initialize_app(cred)
+            print(f"✓ Firebase initialized with service account key: {service_key_path}")
+        else:
+            # Use default credentials (works in production environments like Render with env vars)
+            firebase_admin.initialize_app(options={
+                'projectId': 'optex-b13d3',
+            })
+            print("✓ Firebase initialized with default credentials")
+    
+    db = firestore.client()
+    print("✓ Firestore client ready")
+except Exception as e:
+    print(f"⚠ Firebase initialization failed: {e}")
+    print("⚠ Optimization will proceed without APC limits from Firebase")
+    db = None
+
+# Pricing configuration (can be updated via API)
+class PricingConfig(BaseModel):
+    limestone_price_per_ton: float = 15.0  # $/ton
+    clay_price_per_ton: float = 12.0  # $/ton
+    traditional_fuel_price_per_kg: float = 0.08  # $/kg
+    alternative_fuel_price_per_kg: float = 0.03  # $/kg (cheaper alternative)
+    clinker_selling_price_per_ton: float = 50.0  # $/ton
+    electricity_price_per_kwh: float = 0.10  # $/kWh
+    byproduct_credit_per_ton: float = 5.0  # $/ton (revenue from byproducts)
+
+# Global pricing config
+pricing_config = PricingConfig()
+
+# Optimization history storage
+optimization_history = []
+optimization_history_lock = Lock()
 
 # --- Load ML Models for Predictions ---
 def load_models():
@@ -644,10 +690,28 @@ class ConstraintRange(BaseModel):
     min_value: float
     max_value: float
 
+class OptimizationResult(BaseModel):
+    segment: str
+    optimization_type: str  # "apc_limits" or "engineering_limits"
+    suggested_targets: Dict[str, float]
+    soft_sensors: Dict[str, float]
+    optimization_score: float
+    economic_value: float  # $/hour
+    constraint_violations: List[str]
+    model_type: str
+    
+class DualOptimizationResponse(BaseModel):
+    apc_optimization: OptimizationResult
+    engineering_optimization: OptimizationResult
+    optimization_history: List[Dict[str, float]]  # Trial history for plotting
+    pricing_details: Dict[str, float]
+
 class OptimizeRequest(BaseModel):
     segment: str = 'Clinkerization'
     n_data: int = 50
     constraint_ranges: list[ConstraintRange] = []
+    use_custom_pricing: bool = False
+    custom_pricing: Optional[PricingConfig] = None
 
 # --- ML Prediction Functions ---
 def make_predictions(input_data: PredictionInput) -> PredictionResponse:
@@ -813,12 +877,101 @@ OPTIMIZER_VARIABLES = {
     }
 }
 
+# Engineering hard limits (safety and equipment design limits)
+ENGINEERING_LIMITS = {
+    'trad_fuel_rate_kg_hr': (900, 1800),
+    'alt_fuel_rate_kg_hr': (100, 1000),
+    'raw_meal_feed_rate_tph': (100, 220),
+    'kiln_speed_rpm': (2.0, 5.5),
+    'id_fan_speed_pct': (60, 95),
+    'burning_zone_temp_c': (1400, 1500),
+    'kiln_motor_torque_pct': (45, 85),
+    'kiln_inlet_o2_pct': (2.0, 6.0),
+    'id_fan_power_kw': (100, 300)
+}
+
+async def fetch_apc_limits_from_firebase():
+    """Fetch APC limits from Firebase apclimits collection"""
+    if db is None:
+        print("⚠ Firebase not initialized, using default limits")
+        return {}
+    
+    try:
+        apc_limits = {}
+        docs = db.collection('apclimits').stream()
+        
+        for doc in docs:
+            data = doc.to_dict()
+            variable_name = doc.id
+            
+            # Map Firebase document ID to backend variable name
+            mapping_key = data.get('mappingKey', '')
+            if mapping_key:
+                # Extract variable name from mapping key (e.g., "kiln.alt_fuel_rate_kg_hr" -> "alt_fuel_rate_kg_hr")
+                var_name = mapping_key.split('.')[-1] if '.' in mapping_key else mapping_key
+                
+                ll = float(data.get('ll', 0))
+                hl = float(data.get('hl', 100))
+                
+                apc_limits[var_name] = (ll, hl)
+                print(f"✓ Loaded APC limit for {var_name}: [{ll}, {hl}]")
+        
+        return apc_limits
+    except Exception as e:
+        print(f"✗ Error fetching APC limits from Firebase: {e}")
+        return {}
+
+def calculate_economic_value(optimization_vars, pricing: PricingConfig):
+    """Calculate economic value (profit) in $/hour based on optimization variables"""
+    
+    # Extract variables
+    trad_fuel = optimization_vars.get('trad_fuel_rate_kg_hr', 1200)
+    alt_fuel = optimization_vars.get('alt_fuel_rate_kg_hr', 400)
+    feed_rate = optimization_vars.get('raw_meal_feed_rate_tph', 150)
+    
+    # Assume typical composition for raw meal
+    limestone_fraction = 0.75  # 75% limestone
+    clay_fraction = 0.20  # 20% clay
+    
+    # Calculate costs ($/hour)
+    limestone_cost = feed_rate * limestone_fraction * pricing.limestone_price_per_ton
+    clay_cost = feed_rate * clay_fraction * pricing.clay_price_per_ton
+    trad_fuel_cost = trad_fuel * pricing.traditional_fuel_price_per_kg
+    alt_fuel_cost = alt_fuel * pricing.alternative_fuel_price_per_kg
+    
+    # Calculate clinker production (t/h)
+    clinker_production = feed_rate * 0.65  # 65% yield
+    
+    # Calculate revenue ($/hour)
+    clinker_revenue = clinker_production * pricing.clinker_selling_price_per_ton
+    byproduct_revenue = clinker_production * 0.1 * pricing.byproduct_credit_per_ton  # 10% byproducts
+    
+    # Calculate electricity cost
+    id_fan_power = optimization_vars.get('id_fan_power_kw', 180)
+    electricity_cost = id_fan_power * pricing.electricity_price_per_kwh
+    
+    # Total costs and revenues
+    total_cost = limestone_cost + clay_cost + trad_fuel_cost + alt_fuel_cost + electricity_cost
+    total_revenue = clinker_revenue + byproduct_revenue
+    
+    # Economic value (profit per hour)
+    economic_value = total_revenue - total_cost
+    
+    return economic_value
+
 def get_recent_data(n=50):
     with plant_data_lock:
         return plant_data_history[-n:] if len(plant_data_history) >= n else plant_data_history[:]
 
-def optimize_targets(segment: str = 'Clinkerization', n_data: int = 50, constraint_ranges: list = None):
-    """Run optimization using hybrid first-principles + ML model"""
+async def optimize_with_limits(
+    segment: str, 
+    n_data: int, 
+    limit_type: str,  # "apc" or "engineering"
+    limits_dict: Dict[str, tuple],
+    pricing: PricingConfig,
+    constraint_ranges: list = None
+):
+    """Run optimization with specified limits (APC or Engineering)"""
     global plant_data_history, hybrid_model
     
     try:
@@ -846,188 +999,271 @@ def optimize_targets(segment: str = 'Clinkerization', n_data: int = 50, constrai
             for cr in constraint_ranges:
                 constraint_dict[cr['variable']] = (cr['min_value'], cr['max_value'])
         
+        # Trial history for plotting
+        trial_history = []
+        
         # Define objective function
         def objective(trial):
             # Suggest values for optimization variables
             optimization_vars = {}
             for var in variables['optimization']:
-                # Extract values based on variable location in data structure
-                vals = []
-                for d in data:
-                    val = None
-                    if var in d.get('kpi', {}):
-                        val = d['kpi'][var]
-                    elif var in d.get('raw_mill', {}):
-                        val = d['raw_mill'][var]
-                    elif var in d.get('kiln', {}):
-                        val = d['kiln'][var]
-                    elif var in d.get('production', {}):
-                        val = d['production'][var]
-                    
-                    if val is not None:
-                        vals.append(val)
-                
-                if vals:
-                    low, high = min(vals) * 0.9, max(vals) * 1.1  # Tighter range around historical data
+                # Use provided limits (APC or Engineering)
+                if var in limits_dict:
+                    low, high = limits_dict[var]
                 else:
-                    # Realistic ranges based on cement plant operations
-                    if var == 'trad_fuel_rate_kg_hr':
-                        low, high = 900, 1800  # Typical traditional fuel range
-                    elif var == 'alt_fuel_rate_kg_hr':
-                        low, high = 100, 1000    # Alternative fuel range
-                    elif var == 'raw_meal_feed_rate_tph':
-                        low, high = 100, 220    # Feed rate range
-                    elif var == 'kiln_speed_rpm':
-                        low, high = 2.0, 5.5    # Kiln speed range
-                    elif var == 'id_fan_speed_pct':
-                        low, high = 60, 95      # ID fan speed range
-                    elif 'temp' in var:
-                        low, high = 1350, 1550
-                    elif 'torque' in var:
-                        low, high = 45, 90
-                    elif 'o2' in var:
-                        low, high = 2.0, 6.0
-                    elif 'power' in var and 'kw' in var:
-                        low, high = 100, 350
-                    elif 'vibration' in var:
-                        low, high = 1, 7
-                    elif 'feeder' in var:
-                        low, high = 10, 35
+                    # Extract values based on variable location in data structure
+                    vals = []
+                    for d in data:
+                        val = None
+                        if var in d.get('kpi', {}):
+                            val = d['kpi'][var]
+                        elif var in d.get('raw_mill', {}):
+                            val = d['raw_mill'][var]
+                        elif var in d.get('kiln', {}):
+                            val = d['kiln'][var]
+                        elif var in d.get('production', {}):
+                            val = d['production'][var]
+                        
+                        if val is not None:
+                            vals.append(val)
+                    
+                    if vals:
+                        low, high = min(vals) * 0.9, max(vals) * 1.1
                     else:
-                        low, high = 0, 100
+                        # Fallback to engineering limits
+                        low, high = ENGINEERING_LIMITS.get(var, (0, 100))
                 
                 optimization_vars[var] = trial.suggest_float(var, low, high)
             
             # Use hybrid model to predict constraint responses for Clinkerization
             constraint_penalty = 0
+            constraint_violations = []
+            
             if segment == 'Clinkerization':
                 predicted_constraints = hybrid_model.predict_constraint_responses(
                     optimization_vars, current_constraints
                 )
                 
-                # Check if constraints are within acceptable ranges
+                # Check constraints against specified limits
                 for var in variables['constraints']:
                     if var in predicted_constraints:
                         predicted_value = predicted_constraints[var]
                         
-                        # Check user-defined constraint ranges
-                        if var in constraint_dict:
+                        # Get limit for this constraint
+                        if var in limits_dict:
+                            min_val, max_val = limits_dict[var]
+                        elif var in constraint_dict:
                             min_val, max_val = constraint_dict[var]
-                            if predicted_value < min_val or predicted_value > max_val:
-                                # Gradual penalty proportional to constraint violation
-                                violation = max(min_val - predicted_value, predicted_value - max_val, 0)
-                                constraint_penalty += violation * 2  # Gradual penalty instead of fixed
+                        else:
+                            min_val, max_val = ENGINEERING_LIMITS.get(var, (0, 1000))
                         
-                        # Check physical limits (more severe for safety violations)
-                        if var == 'burning_zone_temp_c':
-                            if predicted_value < 1400 or predicted_value > 1500:
-                                violation = max(1400 - predicted_value, predicted_value - 1500, 0)
-                                constraint_penalty += violation * 5  # Temperature safety is critical
-                        elif var == 'kiln_motor_torque_pct':
-                            if predicted_value > 85:  # Only penalize over-torque (equipment damage)
-                                constraint_penalty += (predicted_value - 85) * 3
-                        elif var == 'kiln_inlet_o2_pct':
-                            if predicted_value < 2.0:  # Under-oxygenation is dangerous
-                                constraint_penalty += (2.0 - predicted_value) * 10
-                            elif predicted_value > 6.0:  # Over-oxygenation wastes energy
-                                constraint_penalty += (predicted_value - 6.0) * 2
-                        elif var == 'id_fan_power_kw':
-                            if predicted_value > 300:  # Equipment limit
-                                constraint_penalty += (predicted_value - 300) * 2
+                        # Check if constraint is violated
+                        if predicted_value < min_val or predicted_value > max_val:
+                            violation = max(min_val - predicted_value, predicted_value - max_val, 0)
+                            constraint_penalty += violation * 10  # Heavy penalty for violations
+                            constraint_violations.append(f"{var}: {predicted_value:.2f} (limit: [{min_val}, {max_val}])")
             
-            # Calculate objective score
-            if segment == 'Clinkerization':
-                # Calculate estimated clinker production from feed rate and efficiency
-                feed_rate = optimization_vars.get('raw_meal_feed_rate_tph', 150)
-                estimated_clinker_rate = feed_rate * 0.65  # Typical yield factor
-                
-                # Calculate specific heat consumption (SHC) - key efficiency metric
-                trad_fuel = optimization_vars.get('trad_fuel_rate_kg_hr', 1200)
-                alt_fuel = optimization_vars.get('alt_fuel_rate_kg_hr', 400)
-                total_energy = trad_fuel * 7000 + alt_fuel * 4500  # kcal/hr
-                shc = total_energy / (estimated_clinker_rate * 1000) if estimated_clinker_rate > 0 else 1000
-                
-                # Calculate TSR (alternative fuel ratio) - higher is better for sustainability
-                tsr = (alt_fuel * 4500) / total_energy * 100 if total_energy > 0 else 0
-                
-                # Production efficiency score (normalized)
-                production_score = min(estimated_clinker_rate / 120, 1.5) * 40  # Cap at 120 tph baseline
-                
-                # Energy efficiency score (lower SHC is better, target ~750 kcal/kg)
-                energy_score = max(0, (1000 - shc) / 10)  # Higher score for lower SHC
-                
-                # Sustainability score (higher TSR is better, target ~30%)
-                sustainability_score = min(tsr / 3, 10)  # Normalize TSR contribution
-                
-                # Motor efficiency (lower torque is better for motor life)
-                motor_score = max(0, (85 - predicted_constraints.get('kiln_motor_torque_pct', 70)) / 2)
-                
-                # Combined objective with cement industry priorities
-                efficiency_score = (
-                    production_score * 0.45 +      # Production rate (45%)
-                    energy_score * 0.20 +          # Energy efficiency (20%) 
-                    sustainability_score * 0.20 +  # Sustainability/TSR (20%)
-                    motor_score * 0.15             # Equipment efficiency (15%)
-                )
-            else:  # Raw Materials & Grinding
-                # Objective: maximize throughput while minimizing power consumption
-                throughput_score = optimization_vars.get('mill_throughput_tph', 150) * 0.5
-                efficiency_score = (30 - optimization_vars.get('mill_power_kwh_ton', 20)) * 0.5
-                efficiency_score = throughput_score + efficiency_score
+            # Calculate economic value using pricing
+            economic_value = calculate_economic_value(optimization_vars, pricing)
             
-            return efficiency_score - constraint_penalty
+            # Economic objective (maximize profit)
+            objective_score = economic_value - constraint_penalty
+            
+            # Store trial history
+            trial_history.append({
+                'trial': trial.number,
+                'economic_value': economic_value,
+                'constraint_penalty': constraint_penalty,
+                'objective_score': objective_score
+            })
+            
+            return objective_score
         
-        # Run optimization with advanced sampler
+        # Run optimization
         study = optuna.create_study(
             direction='maximize',
             sampler=optuna.samplers.TPESampler(n_startup_trials=20, n_ei_candidates=30)
         )
-        study.optimize(objective, n_trials=500)
+        study.optimize(objective, n_trials=500, show_progress_bar=False)
         
         best_params = study.best_params
         
-        # Calculate final constraint responses using hybrid model
+        # Calculate final constraint responses and economic value
         soft_sensors = {}
+        final_economic_value = 0
+        constraint_violations = []
+        
         if segment == 'Clinkerization':
             final_constraints = hybrid_model.predict_constraint_responses(
                 best_params, current_constraints
             )
-            # Merge optimization and constraint variables
             best_params.update(final_constraints)
             
-            # Calculate soft sensors using the hybrid model
+            # Calculate soft sensors
             soft_sensors = hybrid_model.first_principles.calculate_soft_sensors(
                 best_params, 
                 final_constraints, 
                 current_state
             )
+            
+            # Check for constraint violations in final solution
+            for var in variables['constraints']:
+                if var in best_params:
+                    value = best_params[var]
+                    if var in limits_dict:
+                        min_val, max_val = limits_dict[var]
+                    else:
+                        min_val, max_val = ENGINEERING_LIMITS.get(var, (0, 1000))
+                    
+                    if value < min_val or value > max_val:
+                        constraint_violations.append(f"{var}: {value:.2f} outside [{min_val}, {max_val}]")
         
-        return {
-            "segment": segment,
-            "suggested_targets": best_params,
-            "soft_sensors": soft_sensors,
-            "optimization_score": study.best_value,
-            "model_type": "hybrid_fp_ml"
-        }
+        # Calculate final economic value
+        final_economic_value = calculate_economic_value(best_params, pricing)
+        
+        return OptimizationResult(
+            segment=segment,
+            optimization_type=limit_type,
+            suggested_targets=best_params,
+            soft_sensors=soft_sensors,
+            optimization_score=study.best_value,
+            economic_value=final_economic_value,
+            constraint_violations=constraint_violations,
+            model_type="hybrid_fp_ml"
+        ), trial_history
         
     except Exception as e:
-        print(f"Optimization error: {str(e)}")
-        return {"error": f"Optimizer failed: {str(e)}"}
-
-@app.get("/optimize_targets")
-def optimize_targets_api_get(segment: str = 'Clinkerization', n_data: int = 50):
-    """
-    Run Optuna optimizer for the selected segment and return suggested targets (GET version).
-    """
-    return optimize_targets(segment, n_data)
+        print(f"Optimization error ({limit_type}): {str(e)}")
+        return None, []
 
 @app.post("/optimize_targets")
-def optimize_targets_api_post(request: OptimizeRequest):
+async def optimize_targets_api_post(request: OptimizeRequest):
     """
-    Run Optuna optimizer with user-defined constraint ranges (POST version).
+    INTERNAL ENDPOINT - Called by optimizer worker only.
+    Run dual optimization with both APC limits and engineering limits.
+    Frontend should NOT call this directly - use GET endpoint instead.
     """
-    constraint_ranges = [cr.dict() for cr in request.constraint_ranges] if request.constraint_ranges else None
-    return optimize_targets(request.segment, request.n_data, constraint_ranges)
+    global pricing_config, optimization_history
+    
+    # Use custom pricing if provided
+    pricing = request.custom_pricing if request.use_custom_pricing and request.custom_pricing else pricing_config
+    
+    # Fetch APC limits from Firebase
+    apc_limits = await fetch_apc_limits_from_firebase()
+    
+    # Run optimization with APC limits
+    print("Running optimization with APC limits...")
+    apc_result, apc_history = await optimize_with_limits(
+        segment=request.segment,
+        n_data=request.n_data,
+        limit_type="apc_limits",
+        limits_dict=apc_limits,
+        pricing=pricing,
+        constraint_ranges=[cr.dict() for cr in request.constraint_ranges] if request.constraint_ranges else None
+    )
+    
+    # Run optimization with Engineering limits
+    print("Running optimization with Engineering limits...")
+    eng_result, eng_history = await optimize_with_limits(
+        segment=request.segment,
+        n_data=request.n_data,
+        limit_type="engineering_limits",
+        limits_dict=ENGINEERING_LIMITS,
+        pricing=pricing,
+        constraint_ranges=[cr.dict() for cr in request.constraint_ranges] if request.constraint_ranges else None
+    )
+    
+    # Store in global history
+    with optimization_history_lock:
+        optimization_history.append({
+            'timestamp': time.time(),
+            'segment': request.segment,
+            'apc_economic_value': apc_result.economic_value if apc_result else 0,
+            'eng_economic_value': eng_result.economic_value if eng_result else 0,
+            'apc_history': apc_history,
+            'eng_history': eng_history
+        })
+        
+        # Keep only last 100 optimization runs
+        if len(optimization_history) > 100:
+            optimization_history = optimization_history[-100:]
+    
+    # Prepare pricing details for response
+    pricing_details = {
+        'limestone_price_per_ton': pricing.limestone_price_per_ton,
+        'clay_price_per_ton': pricing.clay_price_per_ton,
+        'traditional_fuel_price_per_kg': pricing.traditional_fuel_price_per_kg,
+        'alternative_fuel_price_per_kg': pricing.alternative_fuel_price_per_kg,
+        'clinker_selling_price_per_ton': pricing.clinker_selling_price_per_ton,
+        'electricity_price_per_kwh': pricing.electricity_price_per_kwh,
+        'byproduct_credit_per_ton': pricing.byproduct_credit_per_ton
+    }
+    
+    return DualOptimizationResponse(
+        apc_optimization=apc_result,
+        engineering_optimization=eng_result,
+        optimization_history=apc_history + eng_history,  # Combined history for plotting
+        pricing_details=pricing_details
+    )
+
+@app.get("/optimize_targets")
+async def optimize_targets_api_get(segment: str = 'Clinkerization', n_data: int = 50):
+    """
+    Trigger optimization request - actual optimization runs in background worker.
+    This endpoint just updates Firebase state to request optimization.
+    """
+    if db is None:
+        return {"error": "Firebase not initialized"}
+    
+    try:
+        # Update optimizer state in Firebase to trigger worker
+        state_ref = db.collection('optimizer_state').document('current')
+        state_ref.set({
+            'running': True,
+            'autoSchedule': True,
+            'timer': 0,  # Set to 0 to trigger immediate optimization
+            'lastUpdateTime': int(time.time() * 1000),
+            'segment': segment
+        }, merge=True)
+        
+        return {
+            "status": "queued",
+            "message": f"Optimization request queued for {segment}. The background worker will process it.",
+            "note": "Make sure the optimizer worker is running to process this request."
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/update_pricing")
+def update_pricing_api(new_pricing: PricingConfig):
+    """
+    Update global pricing configuration.
+    """
+    global pricing_config
+    pricing_config = new_pricing
+    return {
+        "status": "success",
+        "message": "Pricing configuration updated",
+        "pricing": pricing_config.dict()
+    }
+
+@app.get("/get_pricing")
+def get_pricing_api():
+    """
+    Get current pricing configuration.
+    """
+    return pricing_config
+
+@app.get("/optimization_history")
+def get_optimization_history_api():
+    """
+    Get historical optimization results for analysis.
+    """
+    with optimization_history_lock:
+        return {
+            "total_runs": len(optimization_history),
+            "history": optimization_history
+        }
 
 @app.post("/apply_optimizer_targets")
 def apply_optimizer_targets_api(targets: OptimizerTargets):
@@ -1130,6 +1366,123 @@ def debug_models():
 @app.get("/")
 def read_root():
     return {"message": "Cement Plant Live Data Simulator is running"}
+
+# Background optimization state
+background_optimization_state = {
+    "running": False,
+    "last_run": None,
+    "next_run": None
+}
+
+@app.post("/start_background_optimization")
+async def start_background_optimization(segment: str = "Clinkerization"):
+    """Start background optimization scheduler"""
+    global background_optimization_state
+    
+    if db is None:
+        return {"error": "Firebase not initialized"}
+    
+    try:
+        # Update optimizer state in Firebase to running
+        state_ref = db.collection('optimizer_state').document('current')
+        state_ref.set({
+            'running': True,
+            'autoSchedule': True,
+            'timer': 300,
+            'lastUpdateTime': firestore.SERVER_TIMESTAMP,
+            'segment': segment
+        })
+        
+        background_optimization_state["running"] = True
+        return {"status": "success", "message": "Background optimization started"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.post("/stop_background_optimization")
+async def stop_background_optimization():
+    """Stop background optimization scheduler"""
+    global background_optimization_state
+    
+    if db is None:
+        return {"error": "Firebase not initialized"}
+    
+    try:
+        # Update optimizer state in Firebase to stopped
+        state_ref = db.collection('optimizer_state').document('current')
+        state_ref.set({
+            'running': False,
+            'autoSchedule': False,
+            'timer': 300,
+            'lastUpdateTime': firestore.SERVER_TIMESTAMP
+        })
+        
+        background_optimization_state["running"] = False
+        return {"status": "success", "message": "Background optimization stopped"}
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/check_and_run_optimization")
+async def check_and_run_optimization():
+    """Check if optimization should run based on Firebase state and execute if needed"""
+    if db is None:
+        return {"error": "Firebase not initialized"}
+    
+    try:
+        # Get current optimizer state
+        state_ref = db.collection('optimizer_state').document('current')
+        state_doc = state_ref.get()
+        
+        if not state_doc.exists:
+            return {"status": "no_state", "message": "No optimizer state found"}
+        
+        state = state_doc.to_dict()
+        
+        if not state.get('running') or not state.get('autoSchedule'):
+            return {"status": "not_running", "message": "Optimizer not running"}
+        
+        # Calculate elapsed time since last update
+        last_update = state.get('lastUpdateTime')
+        if last_update:
+            # Convert Firestore timestamp to seconds
+            if hasattr(last_update, 'timestamp'):
+                last_update_seconds = last_update.timestamp()
+            else:
+                last_update_seconds = last_update
+            
+            current_time = time.time()
+            elapsed = current_time - last_update_seconds
+            timer = state.get('timer', 300)
+            
+            # Check if 5 minutes (300 seconds) have passed
+            if elapsed >= timer:
+                # Time to run optimization
+                segment = state.get('segment', 'Clinkerization')
+                
+                # Run optimization
+                result = await optimize_targets_api_get(segment)
+                
+                # Reset timer
+                state_ref.update({
+                    'timer': 300,
+                    'lastUpdateTime': firestore.SERVER_TIMESTAMP
+                })
+                
+                return {
+                    "status": "optimization_ran",
+                    "message": f"Optimization executed for {segment}",
+                    "result": result
+                }
+            else:
+                remaining = timer - elapsed
+                return {
+                    "status": "waiting",
+                    "message": f"Waiting for optimization",
+                    "remaining_seconds": int(remaining)
+                }
+        
+        return {"status": "no_timestamp", "message": "No last update timestamp"}
+    except Exception as e:
+        return {"error": str(e)}
 
 # Generate initial data after all functions are defined
 generate_initial_data()
