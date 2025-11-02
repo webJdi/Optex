@@ -47,7 +47,11 @@ interface SpeechRecognitionConstructor {
 
 interface SpeechRecognition {
   lang: string;
+  continuous: boolean;
+  interimResults: boolean;
   onresult: (event: SpeechRecognitionEvent) => void;
+  onerror: (event: any) => void;
+  onstart: () => void;
   onend?: () => void;
   start: () => void;
 }
@@ -77,33 +81,109 @@ function VoiceChatButton() {
   // Voice input Segment
   const startVoice = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'en-US';
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      setInput(event.results[0][0].transcript);
-      setVoiceSent(true);
-    };
-    recognition.start();
-    setListening(true);
-    recognition.onend = () => {
-      setListening(false);
-      // To send automatic query when speaker stops; The timeout (set at 0.5s) can be changed based on requirements; 
-      setTimeout(() => {
-        if (input) sendQuery();
-      }, 500);
-    };
+    if (!SpeechRecognition) {
+      console.error('Speech Recognition not supported in this browser');
+      const errorMessage = "Voice recognition is not supported in this browser. Please try using Chrome or Edge.";
+      setResponse(errorMessage);
+      speak(errorMessage);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      
+      let transcribedText = '';
+      
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
+        transcribedText = event.results[0][0].transcript;
+        console.log('Voice input received:', transcribedText);
+        setInput(transcribedText);
+        setVoiceSent(true);
+      };
+      
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setListening(false);
+        const errorMessage = "Sorry, I couldn't understand that. Please try speaking again.";
+        setResponse(errorMessage);
+        speak(errorMessage);
+      };
+      
+      recognition.onstart = () => {
+        console.log('Speech recognition started');
+        setListening(true);
+      };
+      
+      recognition.onend = () => {
+        console.log('Speech recognition ended with text:', transcribedText);
+        setListening(false);
+        // To send automatic query when speaker stops; The timeout (set at 0.5s) can be changed based on requirements; 
+        setTimeout(() => {
+          if (transcribedText && transcribedText.trim()) {
+            console.log('Auto-sending query:', transcribedText);
+            sendQueryWithText(transcribedText);
+          }
+        }, 500);
+      };
+      
+      recognition.start();
+    } catch (error) {
+      console.error('Failed to start speech recognition:', error);
+      const errorMessage = "Voice recognition failed to start. Please check your microphone permissions.";
+      setResponse(errorMessage);
+      speak(errorMessage);
+    }
   };
 
   // Voice output
   const speak = (text: string) => {
-    const synth = window.speechSynthesis;
-    const utter = new window.SpeechSynthesisUtterance(text);
-    setSpeaking(true);
-    utter.onend = () => {
+    if (!text || text.trim() === '') {
+      console.warn('Voice Assistant: No text to speak');
+      return;
+    }
+
+    try {
+      const synth = window.speechSynthesis;
+      
+      // Cancel any ongoing speech
+      if (synth.speaking) {
+        console.log('Voice Assistant: Canceling previous speech');
+        synth.cancel();
+      }
+      
+      const utter = new window.SpeechSynthesisUtterance(text);
+      
+      // Set voice properties for better clarity
+      utter.rate = 0.9; // Slightly slower for better understanding
+      utter.pitch = 1.0;
+      utter.volume = 1.0;
+      
+      utter.onstart = () => {
+        console.log('Voice Assistant: Started speaking:', text.substring(0, 50) + '...');
+        setSpeaking(true);
+      };
+      
+      utter.onend = () => {
+        console.log('Voice Assistant: Finished speaking');
+        setSpeaking(false);
+      };
+      
+      utter.onerror = (event) => {
+        console.error('Voice Assistant: Speech synthesis error:', event);
+        setSpeaking(false);
+      };
+      
+      // Small delay to ensure speech synthesis is ready
+      setTimeout(() => {
+        synth.speak(utter);
+      }, 100);
+    } catch (error) {
+      console.error('Voice Assistant: Failed to speak:', error);
       setSpeaking(false);
-    };
-    synth.speak(utter);
+    }
   };
 
   const stopSpeaking = () => {
@@ -115,24 +195,59 @@ function VoiceChatButton() {
   };
 
   const sendQuery = async () => {
-    const res = await fetch('/api/llm', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: input }),
-    });
-    let data = await res.json();
-    let answer = typeof data.answer === 'string' ? data.answer : '';
-    // Remove asterisks from response
-    answer = answer.replace(/\*/g, '').trim();
-    if (!answer) answer = "Sorry, I couldn't process your request.";
-    setResponse(answer);
-    speak(answer);
-    // Store query and cleaned response in Firestore
-    const userId = auth.currentUser?.uid || 'anonymous';
-    storeConversation(input, answer, userId);
-    // Prepare for next command
-    setVoiceSent(false);
-    setInput('');
+    await sendQueryWithText(input);
+  };
+
+  const sendQueryWithText = async (queryText: string) => {
+    try {
+      console.log('Voice Assistant: Sending query:', queryText);
+      
+      const res = await fetch('/api/llm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: queryText }),
+      });
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('Voice Assistant API Error:', res.status, res.statusText, errorText);
+        throw new Error(`API Error: ${res.status} ${res.statusText}`);
+      }
+
+      let data = await res.json();
+      console.log('Voice Assistant: Received response:', data);
+      
+      let answer = typeof data.answer === 'string' ? data.answer : '';
+      // Remove asterisks from response
+      answer = answer.replace(/\*/g, '').trim();
+      if (!answer) answer = "Sorry, I couldn't process your request.";
+      
+      setResponse(answer);
+      console.log('Voice Assistant: Speaking response:', answer);
+      speak(answer);
+      
+      // Store query and cleaned response in Firestore
+      try {
+        const userId = auth.currentUser?.uid || 'anonymous';
+        await storeConversation(queryText, answer, userId);
+      } catch (firebaseError) {
+        console.warn('Failed to store conversation in Firebase:', firebaseError);
+        // Don't fail the voice response for Firebase errors
+      }
+      
+      // Prepare for next command
+      setVoiceSent(false);
+      setInput('');
+    } catch (error) {
+      console.error('Voice Assistant Error:', error);
+      const errorMessage = "I'm sorry, I'm having trouble connecting to the voice service right now. Please try again.";
+      setResponse(errorMessage);
+      speak(errorMessage);
+      
+      // Reset state
+      setVoiceSent(false);
+      setInput('');
+    }
   };
   return (
     <>
