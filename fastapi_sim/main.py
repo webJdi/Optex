@@ -19,14 +19,20 @@ from contextlib import asynccontextmanager
 
 # Global variable for background task
 background_task = None
+optimizer_enabled = True  # Flag to enable/disable optimizer
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifespan - startup and shutdown events"""
     # Startup: Start the optimizer worker in background
-    global background_task
+    global background_task, optimizer_enabled
     print("\n🚀 Starting application with integrated optimizer worker...")
-    background_task = asyncio.create_task(optimizer_worker_loop())
+    
+    if optimizer_enabled:
+        background_task = asyncio.create_task(optimizer_worker_loop())
+        print("✓ Optimizer worker started")
+    else:
+        print("⚠ Optimizer worker disabled")
     
     yield  # Application runs here
     
@@ -1689,6 +1695,8 @@ async def check_and_run_optimization():
     """
     Check Firebase for optimization state and run if needed
     """
+    global background_optimization_state
+    
     try:
         if not db:
             return
@@ -1712,6 +1720,9 @@ async def check_and_run_optimization():
             elapsed = (current_time - last_update) / 1000  # Convert to seconds
             timer = state.get('timer', 300)
             
+            # Update next run time for status endpoint
+            background_optimization_state["next_run"] = (last_update / 1000) + timer
+            
             # Check if 5 minutes (300 seconds) have passed
             if elapsed >= timer:
                 segment = state.get('segment', 'Clinkerization')
@@ -1721,11 +1732,13 @@ async def check_and_run_optimization():
                 result = await run_optimization_internal(segment)
                 
                 if result:
-                    # Reset timer
+                    # Reset timer and update last run time
                     state_ref.update({
                         'timer': 300,
                         'lastUpdateTime': int(time.time() * 1000)
                     })
+                    background_optimization_state["last_run"] = time.time()
+                    background_optimization_state["next_run"] = time.time() + 300
                     print(f"✓ Optimization completed and timer reset")
     except Exception as e:
         print(f"✗ Error in optimization check: {e}")
@@ -1777,49 +1790,142 @@ background_optimization_state = {
 
 @app.post("/start_background_optimization")
 async def start_background_optimization(segment: str = "Clinkerization"):
-    """Start background optimization scheduler"""
-    global background_optimization_state
-    
-    if db is None:
-        return {"error": "Firebase not initialized"}
+    """Start background optimization scheduler - can be called from frontend"""
+    global background_optimization_state, background_task, optimizer_enabled
     
     try:
-        # Update optimizer state in Firebase to running
-        state_ref = db.collection('optimizer_state').document('current')
-        state_ref.set({
-            'running': True,
-            'autoSchedule': True,
-            'timer': 300,
-            'lastUpdateTime': firestore.SERVER_TIMESTAMP,
-            'segment': segment
-        })
+        # Enable optimizer
+        optimizer_enabled = True
+        
+        # Start background task if not already running
+        if background_task is None or background_task.done():
+            background_task = asyncio.create_task(optimizer_worker_loop())
+            print("✓ Optimizer worker started")
+        
+        # Update Firebase state if available
+        if db is not None:
+            state_ref = db.collection('optimizer_state').document('current')
+            state_ref.set({
+                'running': True,
+                'autoSchedule': True,
+                'timer': 300,
+                'lastUpdateTime': int(time.time() * 1000),
+                'segment': segment
+            }, merge=True)
         
         background_optimization_state["running"] = True
-        return {"status": "success", "message": "Background optimization started"}
+        background_optimization_state["next_run"] = time.time() + 300
+        
+        return {
+            "status": "success", 
+            "message": f"Background optimization started for {segment}",
+            "optimizer_running": True,
+            "segment": segment
+        }
     except Exception as e:
+        print(f"Error starting optimizer: {e}")
         return {"error": str(e)}
 
 @app.post("/stop_background_optimization")
 async def stop_background_optimization():
-    """Stop background optimization scheduler"""
-    global background_optimization_state
-    
-    if db is None:
-        return {"error": "Firebase not initialized"}
+    """Stop background optimization scheduler - can be called from frontend"""
+    global background_optimization_state, background_task, optimizer_enabled
     
     try:
-        # Update optimizer state in Firebase to stopped
-        state_ref = db.collection('optimizer_state').document('current')
-        state_ref.set({
-            'running': False,
-            'autoSchedule': False,
-            'timer': 300,
-            'lastUpdateTime': firestore.SERVER_TIMESTAMP
-        })
+        # Disable optimizer
+        optimizer_enabled = False
+        
+        # Cancel background task
+        if background_task and not background_task.done():
+            background_task.cancel()
+            try:
+                await background_task
+            except asyncio.CancelledError:
+                print("✓ Optimizer worker stopped")
+            background_task = None
+        
+        # Update Firebase state if available
+        if db is not None:
+            state_ref = db.collection('optimizer_state').document('current')
+            state_ref.set({
+                'running': False,
+                'autoSchedule': False,
+                'timer': 300,
+                'lastUpdateTime': int(time.time() * 1000)
+            }, merge=True)
         
         background_optimization_state["running"] = False
-        return {"status": "success", "message": "Background optimization stopped"}
+        
+        return {
+            "status": "success", 
+            "message": "Background optimization stopped",
+            "optimizer_running": False
+        }
     except Exception as e:
+        print(f"Error stopping optimizer: {e}")
+        return {"error": str(e)}
+
+@app.get("/optimizer_status")
+async def get_optimizer_status():
+    """Get current optimizer status - useful for frontend to check state"""
+    global background_task, optimizer_enabled, background_optimization_state
+    
+    is_running = background_task is not None and not background_task.done() and optimizer_enabled
+    
+    # Get Firebase state if available
+    firebase_state = {}
+    if db is not None:
+        try:
+            state_ref = db.collection('optimizer_state').document('current')
+            state_doc = state_ref.get()
+            if state_doc.exists:
+                firebase_state = state_doc.to_dict()
+        except Exception as e:
+            print(f"Error fetching Firebase state: {e}")
+    
+    return {
+        "optimizer_running": is_running,
+        "optimizer_enabled": optimizer_enabled,
+        "background_task_active": background_task is not None and not background_task.done(),
+        "last_run": background_optimization_state.get("last_run"),
+        "next_run": background_optimization_state.get("next_run"),
+        "firebase_state": firebase_state
+    }
+
+@app.post("/trigger_optimization_now")
+async def trigger_optimization_now(segment: str = "Clinkerization"):
+    """Manually trigger an immediate optimization run (bypass timer)"""
+    global background_optimization_state
+    
+    try:
+        print(f"🔥 Manual optimization trigger for {segment}...")
+        
+        # Run optimization immediately
+        result = await run_optimization_internal(segment)
+        
+        if result:
+            background_optimization_state["last_run"] = time.time()
+            
+            # Update Firebase state
+            if db is not None:
+                state_ref = db.collection('optimizer_state').document('current')
+                state_ref.update({
+                    'lastUpdateTime': int(time.time() * 1000),
+                    'timer': 300  # Reset timer
+                })
+            
+            return {
+                "status": "success",
+                "message": f"Optimization completed for {segment}",
+                "result": result
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "Optimization failed"
+            }
+    except Exception as e:
+        print(f"Error in manual optimization: {e}")
         return {"error": str(e)}
 
 @app.get("/check_and_run_optimization")
