@@ -1706,42 +1706,78 @@ async def check_and_run_optimization():
         state_doc = state_ref.get()
         
         if not state_doc.exists:
+            print("⚠ optimizer_state/current document does not exist in Firebase")
             return
         
         state = state_doc.to_dict()
         
-        if not state.get('running') or not state.get('autoSchedule'):
+        # Check if optimizer is enabled
+        running = state.get('running', False)
+        auto_schedule = state.get('autoSchedule', False)
+        
+        if not running or not auto_schedule:
+            # Optimizer is disabled
+            return
+        
+        segment = state.get('segment', 'Clinkerization')
+        timer = state.get('timer', 300)  # Default 5 minutes
+        last_update = state.get('lastUpdateTime')
+        
+        # Handle first run (no lastUpdateTime set yet)
+        if last_update is None or last_update == 0:
+            print(f"🚀 First optimization run for {segment}...")
+            
+            # Run optimization immediately
+            result = await run_optimization_internal(segment)
+            
+            if result:
+                # Set initial timer and timestamp
+                state_ref.update({
+                    'timer': timer,
+                    'lastUpdateTime': int(time.time() * 1000)
+                })
+                background_optimization_state["last_run"] = time.time()
+                background_optimization_state["next_run"] = time.time() + timer
+                print(f"✓ First optimization completed, timer set to {timer}s")
             return
         
         # Calculate elapsed time since last update
-        last_update = state.get('lastUpdateTime')
-        if last_update:
-            current_time = time.time() * 1000  # Convert to milliseconds
-            elapsed = (current_time - last_update) / 1000  # Convert to seconds
-            timer = state.get('timer', 300)
+        current_time = time.time() * 1000  # Convert to milliseconds
+        elapsed = (current_time - last_update) / 1000  # Convert to seconds
+        
+        # Update next run time for status endpoint
+        background_optimization_state["next_run"] = (last_update / 1000) + timer
+        
+        # Log status every 10 polls (every 100 seconds)
+        if int(time.time()) % 100 == 0:
+            print(f"📊 Optimizer status: {elapsed:.0f}s / {timer}s elapsed, next run in {timer - elapsed:.0f}s")
+        
+        # Check if timer has expired
+        if elapsed >= timer:
+            print(f"⏰ Timer expired ({elapsed:.0f}s >= {timer}s)! Running optimization for {segment}...")
             
-            # Update next run time for status endpoint
-            background_optimization_state["next_run"] = (last_update / 1000) + timer
+            # Run optimization
+            result = await run_optimization_internal(segment)
             
-            # Check if 5 minutes (300 seconds) have passed
-            if elapsed >= timer:
-                segment = state.get('segment', 'Clinkerization')
-                print(f"⏰ Timer expired! Running optimization for {segment}...")
-                
-                # Run optimization
-                result = await run_optimization_internal(segment)
-                
-                if result:
-                    # Reset timer and update last run time
-                    state_ref.update({
-                        'timer': 300,
-                        'lastUpdateTime': int(time.time() * 1000)
-                    })
-                    background_optimization_state["last_run"] = time.time()
-                    background_optimization_state["next_run"] = time.time() + 300
-                    print(f"✓ Optimization completed and timer reset")
+            if result:
+                # Reset timer and update last run time
+                state_ref.update({
+                    'timer': timer,
+                    'lastUpdateTime': int(time.time() * 1000)
+                })
+                background_optimization_state["last_run"] = time.time()
+                background_optimization_state["next_run"] = time.time() + timer
+                print(f"✓ Optimization completed and timer reset to {timer}s")
+            else:
+                print(f"✗ Optimization failed, will retry in {timer}s")
+                # Still update the timer to avoid rapid retries
+                state_ref.update({
+                    'lastUpdateTime': int(time.time() * 1000)
+                })
     except Exception as e:
         print(f"✗ Error in optimization check: {e}")
+        import traceback
+        traceback.print_exc()
 
 async def optimizer_worker_loop():
     """Background task that polls for optimization requests every 10 seconds"""
