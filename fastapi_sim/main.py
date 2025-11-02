@@ -1617,37 +1617,31 @@ async def run_optimization_internal(segment: str):
     try:
         print(f"🔧 Running optimization for {segment} internally...")
         
-        # Create the request object
-        from pydantic import BaseModel
+        # Create the request object directly (no HTTP call needed - same process)
+        request = OptimizeRequest(
+            segment=segment,
+            n_data=50,
+            use_custom_pricing=False,
+            constraint_ranges=[]
+        )
         
-        # Call the existing optimize_targets function logic
-        # We'll use a simple HTTP call to localhost to reuse existing logic
-        import httpx
+        # Call the optimization function directly
+        result = await optimize_targets_api_post(request)
         
-        backend_url = os.getenv('BACKEND_URL', 'http://localhost:8000')
+        # Convert Pydantic model to dict if needed
+        if hasattr(result, 'dict'):
+            result_dict = result.dict()
+        elif hasattr(result, 'model_dump'):
+            result_dict = result.model_dump()
+        else:
+            result_dict = result
         
-        payload = {
-            "segment": segment,
-            "n_data": 50,
-            "use_custom_pricing": False
-        }
+        print(f"✓ Optimization completed for {segment}")
         
-        async with httpx.AsyncClient(timeout=600.0) as client:
-            response = await client.post(
-                f'{backend_url}/optimize_targets',
-                json=payload
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                print(f"✓ Optimization completed for {segment}")
-                
-                # Save to Firebase
-                save_optimization_to_firebase_internal(result, segment)
-                return result
-            else:
-                print(f"✗ Optimization failed with status {response.status_code}")
-                return None
+        # Save to Firebase
+        save_optimization_to_firebase_internal(result_dict, segment)
+        return result_dict
+        
     except Exception as e:
         print(f"✗ Error running optimization: {e}")
         import traceback
