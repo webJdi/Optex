@@ -1698,17 +1698,26 @@ def save_optimization_to_firebase_internal(result, segment):
     except Exception as e:
         print(f"⚠ Error saving to Firebase: {e}")
 
+# Global variables for logging throttling
+_last_heartbeat_log = 0
+_last_state_log = 0
+_last_check_log = 0
+
 async def check_and_run_optimization():
     """
     Check Firebase for optimization state and run if needed
     """
-    global background_optimization_state
+    global background_optimization_state, _last_check_log
+    
+    # Debug: Log every call every 10 seconds
+    current = time.time()
+    if current - _last_check_log >= 10:
+        print(f"🔄 check_and_run_optimization() called at {time.strftime('%H:%M:%S')}")
+        _last_check_log = current
     
     try:
         if not db:
-            # Only log this once per minute to avoid spam
-            if int(time.time()) % 60 == 0:
-                print("⚠ Firebase not connected - skipping optimization check")
+            print("⚠ Firebase not connected - skipping optimization check")
             return
         
         # Get current optimizer state
@@ -1723,23 +1732,23 @@ async def check_and_run_optimization():
         
         state = state_doc.to_dict()
         
+        # Debug: Show what we read from Firebase every 30 seconds
+        global _last_state_log
+        if current - _last_state_log >= 30:
+            print(f"📖 Read from Firebase: {state}")
+            _last_state_log = current
+        
         # Check if optimizer is enabled
         running = state.get('running', False)
         auto_schedule = state.get('autoSchedule', False)
         
         if not running or not auto_schedule:
-            # Only log this once per minute to avoid spam
-            if int(time.time()) % 60 == 0:
-                print(f"⏸️ Optimizer paused: running={running}, autoSchedule={auto_schedule}")
+            print(f"⏸️ Optimizer paused: running={running}, autoSchedule={auto_schedule}")
             return
         
         segment = state.get('segment', 'Clinkerization')
         timer = state.get('timer', 300)  # Default 5 minutes
         last_update = state.get('lastUpdateTime')
-        
-        # Debug log to see what we got from Firebase
-        if int(time.time()) % 30 == 0:  # Every 30 seconds
-            print(f"🔍 Firebase state: segment={segment}, timer={timer}, lastUpdate={last_update}, running={running}, autoSchedule={auto_schedule}")
         
         # Handle first run (no lastUpdateTime set yet)
         if last_update is None or last_update == 0:
@@ -1795,6 +1804,8 @@ async def check_and_run_optimization():
 
 async def optimizer_worker_loop():
     """Background task that polls for optimization requests every 10 seconds"""
+    global _last_heartbeat_log
+    
     print("=" * 60)
     print("🤖 Integrated Optimizer Worker Started")
     print("=" * 60)
@@ -1820,9 +1831,16 @@ async def optimizer_worker_loop():
         print("⚠ WARNING: Firebase not initialized - optimizer will not run")
     
     print()
+    _last_heartbeat_log = time.time()
     
     while True:
         try:
+            # Heartbeat every 30 seconds to confirm worker is alive
+            current = time.time()
+            if current - _last_heartbeat_log >= 30:
+                print(f"💓 Worker heartbeat - {time.strftime('%H:%M:%S')}")
+                _last_heartbeat_log = current
+            
             await check_and_run_optimization()
             await asyncio.sleep(10)  # Check every 10 seconds
         except asyncio.CancelledError:
