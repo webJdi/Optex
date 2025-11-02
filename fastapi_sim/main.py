@@ -1453,20 +1453,27 @@ async def optimize_targets_api_get(segment: str = 'Clinkerization', n_data: int 
     try:
         # Update optimizer state in Firebase to trigger worker
         state_ref = db.collection('optimizer_state').document('current')
-        state_ref.set({
+        
+        # Set timer to 0 to trigger immediate run
+        update_data = {
             'running': True,
             'autoSchedule': True,
             'timer': 0,  # Set to 0 to trigger immediate optimization
             'lastUpdateTime': int(time.time() * 1000),
             'segment': segment
-        }, merge=True)
+        }
+        
+        state_ref.set(update_data, merge=True)
+        
+        print(f"🎯 Optimization triggered via GET endpoint: {update_data}")
         
         return {
             "status": "queued",
-            "message": f"Optimization request queued for {segment}. The background worker will process it.",
-            "note": "Make sure the optimizer worker is running to process this request."
+            "message": f"Optimization request queued for {segment}. The background worker will process it within 10 seconds.",
+            "note": "Worker polls every 10 seconds and will run optimization when timer=0"
         }
     except Exception as e:
+        print(f"✗ Error triggering optimization: {e}")
         return {"error": str(e)}
 
 @app.post("/update_pricing")
@@ -1699,6 +1706,9 @@ async def check_and_run_optimization():
     
     try:
         if not db:
+            # Only log this once per minute to avoid spam
+            if int(time.time()) % 60 == 0:
+                print("⚠ Firebase not connected - skipping optimization check")
             return
         
         # Get current optimizer state
@@ -1706,7 +1716,9 @@ async def check_and_run_optimization():
         state_doc = state_ref.get()
         
         if not state_doc.exists:
-            print("⚠ optimizer_state/current document does not exist in Firebase")
+            # Only log this once per minute to avoid spam
+            if int(time.time()) % 60 == 0:
+                print("⚠ optimizer_state/current document does not exist in Firebase")
             return
         
         state = state_doc.to_dict()
@@ -1716,12 +1728,18 @@ async def check_and_run_optimization():
         auto_schedule = state.get('autoSchedule', False)
         
         if not running or not auto_schedule:
-            # Optimizer is disabled
+            # Only log this once per minute to avoid spam
+            if int(time.time()) % 60 == 0:
+                print(f"⏸️ Optimizer paused: running={running}, autoSchedule={auto_schedule}")
             return
         
         segment = state.get('segment', 'Clinkerization')
         timer = state.get('timer', 300)  # Default 5 minutes
         last_update = state.get('lastUpdateTime')
+        
+        # Debug log to see what we got from Firebase
+        if int(time.time()) % 30 == 0:  # Every 30 seconds
+            print(f"🔍 Firebase state: segment={segment}, timer={timer}, lastUpdate={last_update}, running={running}, autoSchedule={auto_schedule}")
         
         # Handle first run (no lastUpdateTime set yet)
         if last_update is None or last_update == 0:
@@ -1733,12 +1751,12 @@ async def check_and_run_optimization():
             if result:
                 # Set initial timer and timestamp
                 state_ref.update({
-                    'timer': timer,
+                    'timer': 300,  # Reset to 5 minutes
                     'lastUpdateTime': int(time.time() * 1000)
                 })
                 background_optimization_state["last_run"] = time.time()
-                background_optimization_state["next_run"] = time.time() + timer
-                print(f"✓ First optimization completed, timer set to {timer}s")
+                background_optimization_state["next_run"] = time.time() + 300
+                print(f"✓ First optimization completed, timer set to 300s")
             return
         
         # Calculate elapsed time since last update
@@ -1748,11 +1766,7 @@ async def check_and_run_optimization():
         # Update next run time for status endpoint
         background_optimization_state["next_run"] = (last_update / 1000) + timer
         
-        # Log status every 10 polls (every 100 seconds)
-        if int(time.time()) % 100 == 0:
-            print(f"📊 Optimizer status: {elapsed:.0f}s / {timer}s elapsed, next run in {timer - elapsed:.0f}s")
-        
-        # Check if timer has expired
+        # Check if timer has expired (or is set to 0 for immediate run)
         if elapsed >= timer:
             print(f"⏰ Timer expired ({elapsed:.0f}s >= {timer}s)! Running optimization for {segment}...")
             
@@ -1786,6 +1800,25 @@ async def optimizer_worker_loop():
     print("=" * 60)
     print("👀 Watching for optimization requests...")
     print("Polling interval: 10 seconds")
+    print(f"Firebase connected: {db is not None}")
+    print()
+    
+    # Initial Firebase check
+    if db is not None:
+        try:
+            state_ref = db.collection('optimizer_state').document('current')
+            state_doc = state_ref.get()
+            if state_doc.exists:
+                state = state_doc.to_dict()
+                print(f"📋 Initial optimizer_state: running={state.get('running')}, autoSchedule={state.get('autoSchedule')}, timer={state.get('timer')}")
+            else:
+                print("⚠ WARNING: optimizer_state/current document does not exist!")
+                print("   Please create it in Firebase with: {running: true, autoSchedule: true, timer: 300, segment: 'Clinkerization'}")
+        except Exception as e:
+            print(f"⚠ Error checking initial state: {e}")
+    else:
+        print("⚠ WARNING: Firebase not initialized - optimizer will not run")
+    
     print()
     
     while True:
@@ -1797,6 +1830,8 @@ async def optimizer_worker_loop():
             break
         except Exception as e:
             print(f"❌ Error in optimizer worker: {e}")
+            import traceback
+            traceback.print_exc()
             await asyncio.sleep(10)  # Wait before retrying
 
 # ============================================================
