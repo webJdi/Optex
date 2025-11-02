@@ -20,13 +20,13 @@ export interface PredictionResponse {
 }
 
 export async function fetchMLPredictions(input?: PredictionInput): Promise<PredictionResponse> {
+  const apiUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
   const url = input 
-    ? 'http://127.0.0.1:8000/predict'
-    : 'http://127.0.0.1:8000/predict_from_current_state';
+    ? `${apiUrl}/predict`
+    : `${apiUrl}/predict_from_current_state`;
   
-  //const url = input
-  //  ? `${process.env.NEXT_PUBLIC_SIM_API_URL}/predict`
-  //  : `${process.env.NEXT_PUBLIC_SIM_API_URL}/predict_from_current_state`;
+  // For local development, use: http://localhost:8000
+  // For production, use: https://optex-wc0v.onrender.com
 
   const options = input 
     ? {
