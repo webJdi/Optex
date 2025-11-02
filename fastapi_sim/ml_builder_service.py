@@ -25,25 +25,6 @@ from sklearn.metrics import (
 )
 
 # Advanced ML
-try:
-    from xgboost import XGBRegressor, XGBClassifier
-    HAS_XGBOOST = True
-except ImportError:
-    HAS_XGBOOST = False
-    print("⚠ XGBoost not available - install with: pip install xgboost")
-
-try:
-    from lightgbm import LGBMRegressor, LGBMClassifier
-    HAS_LIGHTGBM = True
-except ImportError:
-    HAS_LIGHTGBM = False
-
-try:
-    from catboost import CatBoostRegressor, CatBoostClassifier
-    HAS_CATBOOST = True
-except ImportError:
-    HAS_CATBOOST = False
-    print("⚠ CatBoost not available - install with: pip install catboost")
 
 # Hyperparameter tuning
 try:
@@ -52,19 +33,10 @@ try:
 except ImportError:
     HAS_OPTUNA = False
 
-# SHAP for model interpretability
-try:
-    import shap
-    HAS_SHAP = True
-except ImportError:
-    HAS_SHAP = False
-    print("⚠ SHAP not available - install with: pip install shap")
+# Visualization (disabled to reduce deployment size)
+HAS_MATPLOTLIB = False
+HAS_SEABORN = False
 
-# Visualization
-import matplotlib
-matplotlib.use('Agg')  # Non-interactive backend
-import matplotlib.pyplot as plt
-import seaborn as sns
 
 # Session storage for datasets and models
 class MLSession:
@@ -176,16 +148,9 @@ def univariate_analysis(session_id: str, column: str) -> Dict:
     try:
         col_data = df[column]
         
-        # Generate histogram/distribution plot
-        fig, ax = plt.subplots(figsize=(10, 6))
-        
+        # Statistics only (visualization disabled)
         if pd.api.types.is_numeric_dtype(col_data):
-            # Numeric column - histogram
-            ax.hist(col_data.dropna(), bins=30, edgecolor='black', alpha=0.7)
-            ax.set_title(f'Distribution of {column}')
-            ax.set_xlabel(column)
-            ax.set_ylabel('Frequency')
-            
+            # Numeric column statistics
             stats = {
                 "mean": float(col_data.mean()),
                 "median": float(col_data.median()),
@@ -198,33 +163,21 @@ def univariate_analysis(session_id: str, column: str) -> Dict:
                 "kurtosis": float(col_data.kurtosis())
             }
         else:
-            # Categorical column - bar plot
+            # Categorical column statistics
             value_counts = col_data.value_counts()
-            ax.bar(range(len(value_counts)), value_counts.values)
-            ax.set_xticks(range(len(value_counts)))
-            ax.set_xticklabels(value_counts.index, rotation=45, ha='right')
-            ax.set_title(f'Value Counts of {column}')
-            ax.set_ylabel('Count')
-            
             stats = {
                 "unique_values": int(col_data.nunique()),
                 "most_common": str(col_data.mode()[0]) if len(col_data.mode()) > 0 else None,
                 "value_counts": value_counts.head(10).to_dict()
             }
         
-        # Convert plot to base64
-        buffer = io.BytesIO()
-        plt.tight_layout()
-        plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
-        buffer.seek(0)
-        plot_base64 = base64.b64encode(buffer.read()).decode()
-        plt.close()
-        
+        # No plot available (matplotlib removed to reduce deployment size)
         return {
             "success": True,
             "column": column,
             "stats": stats,
-            "plot": plot_base64
+            "plot": None,
+            "note": "Visualization disabled - matplotlib removed to reduce deployment size"
         }
     except Exception as e:
         return {"error": f"Univariate analysis failed: {str(e)}"}
@@ -242,46 +195,27 @@ def bivariate_analysis(session_id: str, col1: str, col2: str) -> Dict:
         return {"error": "One or both columns not found"}
     
     try:
-        fig, ax = plt.subplots(figsize=(10, 6))
-        
         data1 = df[col1].dropna()
         data2 = df[col2].dropna()
         
-        # Both numeric - scatter plot
+        # Both numeric - calculate correlation
         if pd.api.types.is_numeric_dtype(data1) and pd.api.types.is_numeric_dtype(data2):
             valid_data = df[[col1, col2]].dropna()
-            ax.scatter(valid_data[col1], valid_data[col2], alpha=0.5)
-            ax.set_xlabel(col1)
-            ax.set_ylabel(col2)
-            ax.set_title(f'{col1} vs {col2}')
-            
             # Calculate correlation
             correlation = valid_data[col1].corr(valid_data[col2])
             stats = {"correlation": float(correlation)}
         else:
-            # At least one categorical - grouped bar plot
+            # At least one categorical - cross tabulation
             cross_tab = pd.crosstab(df[col1], df[col2])
-            cross_tab.plot(kind='bar', ax=ax)
-            ax.set_title(f'{col1} vs {col2}')
-            ax.set_xlabel(col1)
-            ax.set_ylabel('Count')
-            ax.legend(title=col2)
-            plt.xticks(rotation=45, ha='right')
             stats = {"cross_tabulation": cross_tab.to_dict()}
         
-        # Convert plot to base64
-        buffer = io.BytesIO()
-        plt.tight_layout()
-        plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
-        buffer.seek(0)
-        plot_base64 = base64.b64encode(buffer.read()).decode()
-        plt.close()
-        
+        # No plot available (matplotlib removed)
         return {
             "success": True,
             "columns": [col1, col2],
             "stats": stats,
-            "plot": plot_base64
+            "plot": None,
+            "note": "Visualization disabled - matplotlib removed to reduce deployment size"
         }
     except Exception as e:
         return {"error": f"Bivariate analysis failed: {str(e)}"}
@@ -305,20 +239,6 @@ def correlation_analysis(session_id: str) -> Dict:
         # Calculate correlation matrix
         corr_matrix = numeric_df.corr()
         
-        # Create heatmap
-        fig, ax = plt.subplots(figsize=(12, 10))
-        sns.heatmap(corr_matrix, annot=True, fmt='.2f', cmap='coolwarm', 
-                    center=0, square=True, ax=ax, cbar_kws={'shrink': 0.8})
-        ax.set_title('Correlation Heatmap')
-        plt.tight_layout()
-        
-        # Convert plot to base64
-        buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
-        buffer.seek(0)
-        plot_base64 = base64.b64encode(buffer.read()).decode()
-        plt.close()
-        
         # Find highly correlated pairs
         high_corr = []
         for i in range(len(corr_matrix.columns)):
@@ -334,7 +254,8 @@ def correlation_analysis(session_id: str) -> Dict:
             "success": True,
             "correlation_matrix": corr_matrix.to_dict(),
             "high_correlations": high_corr,
-            "plot": plot_base64
+            "plot": None,
+            "note": "Visualization disabled - matplotlib removed to reduce deployment size"
         }
     except Exception as e:
         return {"error": f"Correlation analysis failed: {str(e)}"}
@@ -411,15 +332,6 @@ def train_model(session_id: str, model_type: str, **kwargs) -> Dict:
             "gradient_boosting": GradientBoostingRegressor(**kwargs),
             "adaboost": AdaBoostRegressor(**kwargs),
         }
-        
-        if HAS_XGBOOST:
-            models_map["xgboost"] = XGBRegressor(**kwargs)
-        
-        if HAS_LIGHTGBM:
-            models_map["lightgbm"] = LGBMRegressor(**kwargs)
-        
-        if HAS_CATBOOST:
-            models_map["catboost"] = CatBoostRegressor(verbose=False, **kwargs)
         
         if model_type not in models_map:
             return {"error": f"Unknown model type: {model_type}. Available: {list(models_map.keys())}"}
@@ -505,16 +417,6 @@ def tune_hyperparameters(session_id: str, model_type: str, n_trials: int = 50) -
                 }
                 model = RandomForestRegressor(**params, random_state=42)
             
-            elif model_type == "xgboost" and HAS_XGBOOST:
-                params = {
-                    'n_estimators': trial.suggest_int('n_estimators', 10, 300),
-                    'max_depth': trial.suggest_int('max_depth', 2, 10),
-                    'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3),
-                    'subsample': trial.suggest_float('subsample', 0.6, 1.0),
-                    'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
-                }
-                model = XGBRegressor(**params, random_state=42)
-            
             elif model_type == "gradient_boosting":
                 params = {
                     'n_estimators': trial.suggest_int('n_estimators', 10, 300),
@@ -551,52 +453,11 @@ def tune_hyperparameters(session_id: str, model_type: str, n_trials: int = 50) -
         return {"error": f"Hyperparameter tuning failed: {str(e)}"}
 
 def shap_analysis(session_id: str, model_name: str, max_samples: int = 100) -> Dict:
-    """SHAP analysis for model interpretability"""
-    if not HAS_SHAP:
-        return {"error": "SHAP not installed. Install with: pip install shap"}
-    
-    session = get_session(session_id)
-    
-    if model_name not in session.models:
-        return {"error": f"Model '{model_name}' not found. Train a model first."}
-    
-    try:
-        model = session.models[model_name]
-        
-        # Sample data for SHAP (can be slow on large datasets)
-        X_sample = session.X_test.head(max_samples)
-        
-        # Create explainer
-        explainer = shap.Explainer(model, session.X_train)
-        shap_values = explainer(X_sample)
-        
-        # Summary plot
-        fig, ax = plt.subplots(figsize=(10, 8))
-        shap.summary_plot(shap_values, X_sample, show=False)
-        plt.tight_layout()
-        
-        buffer = io.BytesIO()
-        plt.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
-        buffer.seek(0)
-        summary_plot = base64.b64encode(buffer.read()).decode()
-        plt.close()
-        
-        # Feature importance from SHAP
-        shap_importance = np.abs(shap_values.values).mean(axis=0)
-        feature_importance = [
-            {"feature": feat, "shap_importance": float(imp)}
-            for feat, imp in sorted(zip(session.feature_columns, shap_importance), 
-                                   key=lambda x: x[1], reverse=True)
-        ]
-        
-        return {
-            "success": True,
-            "model_name": model_name,
-            "feature_importance": feature_importance,
-            "summary_plot": summary_plot
-        }
-    except Exception as e:
-        return {"error": f"SHAP analysis failed: {str(e)}"}
+    """SHAP analysis for model interpretability - disabled as SHAP library was removed"""
+    return {
+        "error": "SHAP analysis is not available. The SHAP library was removed to reduce deployment size.",
+        "note": "Consider using feature_importances_ attribute for tree-based models instead"
+    }
 
 def download_model(session_id: str, model_name: str, format: str = "joblib") -> Dict:
     """Download trained model as pickle or joblib"""
