@@ -9,3 +9,13 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: BACKEND_URL
+        value: https://optex-wc0v.onrender.com
+      # Firebase Configuration (for APC limits and optimization settings)
+      # Add your Firebase service account key as a Render secret file
+      # Path: /etc/secrets/serviceAccountKey.json
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: /etc/secrets/serviceAccountKey.json
+      # Alternative: Firebase project ID for default auth
+      - key: FIREBASE_PROJECT_ID
+        value: optex-b13d3

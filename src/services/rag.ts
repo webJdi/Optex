@@ -14,7 +14,12 @@ function cosineSimilarity(a: number[], b: number[]): number {
 
 // Embed the query using Gemini
 export async function embedQuery(query: string): Promise<number[]> {
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+  const apiKey = process.env.GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
+    console.warn('No Gemini API key available for embedding');
+    return []; // Return empty array if no API key
+  }
+  const genAI = new GoogleGenerativeAI(apiKey);
   const embeddingModel = genAI.getGenerativeModel({ model: 'text-embedding-004' });
   const result = await embeddingModel.embedContent(query);
   return result.embedding.values;
@@ -22,19 +27,38 @@ export async function embedQuery(query: string): Promise<number[]> {
 
 // Retrieve top N relevant chunks from Firestore
 export async function retrieveContext(query: string, topN = 3): Promise<string[]> {
-  const queryVector = await embedQuery(query);
-  const snapshot = await getDocs(collection(db, 'cement_doc_chunks'));
-  const chunks: { chunk: string; vector: number[] }[] = [];
-  snapshot.forEach((doc: any) => {
-    const data = doc.data();
-    if (data.chunk && Array.isArray(data.vector)) {
-      chunks.push({ chunk: data.chunk, vector: data.vector });
+  try {
+    const queryVector = await embedQuery(query);
+    
+    // If no query vector (e.g., no API key), return empty context
+    if (!queryVector || queryVector.length === 0) {
+      console.warn('No query vector available for context retrieval');
+      return [];
     }
-  });
-  // Rank by similarity
-  const ranked = chunks
-    .map(c => ({ chunk: c.chunk, score: cosineSimilarity(queryVector, c.vector) }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topN);
-  return ranked.map(r => r.chunk);
+    
+    const snapshot = await getDocs(collection(db, 'cement_doc_chunks'));
+    const chunks: { chunk: string; vector: number[] }[] = [];
+    snapshot.forEach((doc: any) => {
+      const data = doc.data();
+      if (data.chunk && Array.isArray(data.vector)) {
+        chunks.push({ chunk: data.chunk, vector: data.vector });
+      }
+    });
+    
+    // If no chunks found, return empty array
+    if (chunks.length === 0) {
+      console.warn('No document chunks found in Firestore');
+      return [];
+    }
+    
+    // Rank by similarity
+    const ranked = chunks
+      .map(c => ({ chunk: c.chunk, score: cosineSimilarity(queryVector, c.vector) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topN);
+    return ranked.map(r => r.chunk);
+  } catch (error) {
+    console.error('Error retrieving context:', error);
+    return []; // Return empty array on error
+  }
 }

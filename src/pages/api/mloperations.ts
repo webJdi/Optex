@@ -43,18 +43,20 @@ interface RequestBody {
   modelInfo?: ModelInfo;
   conversationHistory?: ConversationMessage[];
 }
-
 // Initialize Gemini
 let ai: GoogleGenAI | null = null;
 
 try {
-  ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY
-  });
-  if (process.env.GEMINI_API_KEY) {
+  const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  
+  if (geminiApiKey) {
+    ai = new GoogleGenAI({
+      apiKey: geminiApiKey
+    });
     console.log('✓ Gemini AI initialized with API key');
   } else {
-    console.warn('⚠ GEMINI_API_KEY environment variable not set');
+    console.warn('⚠ NEXT_PUBLIC_GEMINI_API_KEY or GOOGLE_API_KEY environment variable not set');
+    console.log('Available env vars:', Object.keys(process.env).filter(key => key.includes('GEMINI') || key.includes('GOOGLE')));
   }
 } catch (error) {
   console.error('Failed to initialize Gemini AI:', error);
@@ -130,6 +132,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.status(405).json({ error: "Method not allowed" });
     return;
   }
+
+  // Debug logging
+  console.log('ML Operations API called with operation:', req.body.operation);
+  console.log('Gemini AI available:', ai !== null);
+  console.log('NEXT_PUBLIC_GEMINI_API_KEY available:', !!process.env.NEXT_PUBLIC_GEMINI_API_KEY);
 
   try {
     const { operation, query, parameters, datasetPath }: RequestBody = req.body;
@@ -455,7 +462,7 @@ async function performModelTraining(req: NextApiRequest, res: NextApiResponse, d
 async function handleGeneralQuery(req: NextApiRequest, res: NextApiResponse, query: string) {
   try {
     // If Gemini AI is not available, provide a helpful fallback response
-    if (!ai || !process.env.GEMINI_API_KEY) {
+    if (!ai || !process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
       const fallbackResponse = `
 ## 🤖 AI Assistant (Basic Mode)
 
@@ -474,7 +481,7 @@ I understand you're asking: "${query}"
 - "train a classification model" - Build predictive models
 - "show correlation matrix" - Understand feature relationships
 
-**Note:** For enhanced AI responses, configure GEMINI_API_KEY in your .env.local file.
+**Note:** For enhanced AI responses, configure NEXT_PUBLIC_GEMINI_API_KEY in your .env.local file.
 
 Please try uploading a dataset first, then I can provide more specific assistance!
 `;
@@ -522,7 +529,7 @@ Please try uploading a dataset first, then I can provide more specific assistanc
       return res.status(200).json({
         operation: 'query',
         status: 'completed',
-        message: 'AI service is currently unavailable. Please configure GEMINI_API_KEY.',
+        message: 'AI service is currently unavailable. Please configure NEXT_PUBLIC_GEMINI_API_KEY.',
         timestamp: new Date().toISOString()
       });
     }
@@ -574,7 +581,7 @@ I encountered an issue processing your request: "${query}"
 1. 🔄 **Rephrase your question** - Try asking in a different way
 2. 📊 **Use specific commands** - Try "analyze data", "clean data", "train model"
 3. 📁 **Upload a dataset** - This helps me provide more specific guidance
-4. 🔧 **Check configuration** - Ensure GEMINI_API_KEY is set in .env.local
+4. 🔧 **Check configuration** - Ensure NEXT_PUBLIC_GEMINI_API_KEY is set in .env.local
 
 **Need help?** Try these common operations:
 - "analyze my data" - Dataset analysis

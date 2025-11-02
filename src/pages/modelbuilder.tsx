@@ -65,6 +65,8 @@ interface ModelInfo {
   status: 'training' | 'completed' | 'error';
 }
 
+
+
 export default function ModelBuilder() {
   const { user, loading: authLoading } = useRequireAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -285,7 +287,9 @@ export default function ModelBuilder() {
         });
 
         if (!response.ok) {
-          throw new Error('Failed to get AI response');
+          const errorText = await response.text();
+          console.error('API Error:', response.status, response.statusText, errorText);
+          throw new Error(`Failed to get AI response: ${response.status} ${response.statusText} - ${errorText}`);
         }
 
         const data = await response.json();
