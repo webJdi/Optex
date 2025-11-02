@@ -30,6 +30,7 @@ try:
     HAS_XGBOOST = True
 except ImportError:
     HAS_XGBOOST = False
+    print("⚠ XGBoost not available - install with: pip install xgboost")
 
 try:
     from lightgbm import LGBMRegressor, LGBMClassifier
@@ -42,6 +43,7 @@ try:
     HAS_CATBOOST = True
 except ImportError:
     HAS_CATBOOST = False
+    print("⚠ CatBoost not available - install with: pip install catboost")
 
 # Hyperparameter tuning
 try:
@@ -56,6 +58,7 @@ try:
     HAS_SHAP = True
 except ImportError:
     HAS_SHAP = False
+    print("⚠ SHAP not available - install with: pip install shap")
 
 # Visualization
 import matplotlib

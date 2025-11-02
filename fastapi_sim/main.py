@@ -1997,7 +1997,7 @@ async def check_and_run_optimization():
 from ml_builder_service import (
     load_dataset, analyze_dataset, univariate_analysis, bivariate_analysis,
     correlation_analysis, split_dataset, train_model, tune_hyperparameters,
-    shap_analysis, download_model, get_model_summary
+    download_model, get_model_summary
 )
 
 @app.post("/ml/upload_dataset")
@@ -2066,8 +2066,12 @@ async def shap_analysis_endpoint(
     model_name: str,
     max_samples: int = 100
 ):
-    """SHAP analysis for model interpretability"""
-    return shap_analysis(session_id, model_name, max_samples)
+    """SHAP analysis for model interpretability (disabled - requires shap library)"""
+    return {
+        "error": "SHAP analysis is disabled to reduce deployment size",
+        "message": "To enable SHAP analysis, add 'shap==0.45.1' to requirements.txt and redeploy",
+        "alternative": "Use feature importance from the model summary instead"
+    }
 
 @app.get("/ml/download_model")
 async def download_model_endpoint(
