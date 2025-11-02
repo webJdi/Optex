@@ -1,4 +1,4 @@
-<img width="1918" height="907" alt="image" src="https://github.com/user-attachments/assets/5724d316-24be-4c13-b3cc-e3b9612ba7e9" /># Optex
+# Optex Digital Suite: Google GenAI Hackathon Solution 2025
 
 The Optex Suite is a comprehensive digital platform designed to optimize the operations of cement plants. 
 End-to-End Optimization: Digital platform for improving cement plant operations.
@@ -18,7 +18,7 @@ Screenshots:
 <img width="1919" height="909" alt="Screenshot 2025-11-02 144559" src="https://github.com/user-attachments/assets/82abc3fc-81f5-40ca-a48f-c5c5d28a1f3f" />
 <img width="1919" height="913" alt="Screenshot 2025-11-02 144607" src="https://github.com/user-attachments/assets/eaa8bd4e-218a-44e4-8911-f69be3e0029d" />
 <img width="1919" height="908" alt="Screenshot 2025-11-02 144617" src="https://github.com/user-attachments/assets/7857f11d-84ca-4c09-9d6c-d272332cbfe8" />
-
+<img width="1918" height="907" alt="image" src="https://github.com/user-attachments/assets/5724d316-24be-4c13-b3cc-e3b9612ba7e9" /># Optex
 
 
 
