@@ -2023,7 +2023,7 @@ async def trigger_optimization_now(segment: str = "Clinkerization"):
         return {"error": str(e)}
 
 @app.get("/check_and_run_optimization")
-async def check_and_run_optimization():
+async def check_and_run_optimization_endpoint():
     """Check if optimization should run based on Firebase state and execute if needed"""
     if db is None:
         return {"error": "Firebase not initialized"}
